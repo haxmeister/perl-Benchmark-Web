@@ -18,7 +18,7 @@ if ($action eq 'info') {
 }
 if ($action eq 'probe') {
     system $python, '-c', 'import aiohttp';
-    exit $? == 0 ? 0 : 1;
+    exit(($? == 0) ? 0 : 1);
 }
 if ($action eq 'prepare' || $action eq 'cleanup') { exit 0; }
 if ($action eq 'version') {
