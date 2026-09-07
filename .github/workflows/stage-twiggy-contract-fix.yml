@@ -1,0 +1,198 @@
+name: Stage Twiggy contract fix
+
+on:
+  push:
+    branches:
+      - fix/twiggy-persistent-contract
+
+permissions:
+  contents: write
+
+jobs:
+  stage:
+    if: github.event.head_commit.message == 'Stage Twiggy compatibility handling'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/twiggy-persistent-contract
+
+      - name: Apply generic unsupported-target contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          run = Path('benchmarks/http/run.pl')
+          text = run.read_text()
+
+          old = '''    my $order = defined($info->{order}) ? 0 + $info->{order} : 1000;
+          $found{$key} = {
+              label => "$info->{label}",
+              default => $info->{default} ? 1 : 0,
+              order => $order,
+              launcher => $launcher,
+          };
+          '''
+          new = '''    my $order = defined($info->{order}) ? 0 + $info->{order} : 1000;
+          my $supported = exists($info->{supported})
+              ? ($info->{supported} ? 1 : 0)
+              : 1;
+          my $unsupported_reason = $info->{unsupported_reason};
+          if (!$supported) {
+              die "benchmark server $key: info.unsupported_reason is required when supported is false\\n"
+                  if !defined($unsupported_reason)
+                      || ref($unsupported_reason)
+                      || $unsupported_reason eq '';
+          } elsif (defined($unsupported_reason) && ref($unsupported_reason)) {
+              die "benchmark server $key: info.unsupported_reason must be a string\\n";
+          }
+          $found{$key} = {
+              label => "$info->{label}",
+              default => $info->{default} ? 1 : 0,
+              order => $order,
+              launcher => $launcher,
+              supported => $supported,
+              unsupported_reason => defined($unsupported_reason)
+                  ? "$unsupported_reason"
+                  : undef,
+          };
+          '''
+          if old not in text:
+              raise SystemExit('run.pl discovery block not found')
+          text = text.replace(old, new, 1)
+
+          old = '''for my $name (@servers) {
+              if (!launcher_ok($name, 'probe')) {
+          '''
+          new = '''for my $name (@servers) {
+              if (!$server{$name}{supported}) {
+                  push @skipped, $name;
+                  $skip_reason{$name} = 'unsupported: '
+                      . $server{$name}{unsupported_reason};
+                  next;
+              }
+              if (!launcher_ok($name, 'probe')) {
+          '''
+          if old not in text:
+              raise SystemExit('run.pl availability block not found')
+          text = text.replace(old, new, 1)
+
+          text = text.replace(
+              'die "unavailable benchmark servers: "\n',
+              'die "unavailable or unsupported benchmark servers: "\n',
+              1,
+          )
+          old = 'die "no requested benchmark servers are available\\n" if !@available;'
+          new = '''if (!@available) {
+              die "no requested benchmark servers can run this workload:\\n"
+                  . join('', map { "  $_: $skip_reason{$_}\\n" } @skipped);
+          }'''
+          if old not in text:
+              raise SystemExit('run.pl empty available block not found')
+          text = text.replace(old, new, 1)
+          run.write_text(text)
+
+          server = Path('benchmarks/http/servers/twiggy/server.pl')
+          text = server.read_text()
+          old = "    print JSON::PP->new->canonical->encode({ label => 'Twiggy/AnyEvent', default => JSON::PP::false, order => 80 });"
+          new = """    print JSON::PP->new->canonical->encode({
+              label => 'Twiggy/AnyEvent',
+              default => JSON::PP::false,
+              order => 80,
+              supported => JSON::PP::false,
+              unsupported_reason => 'stock Twiggy emits HTTP/1.0 and closes each response; this benchmark requires persistent HTTP/1.1 connections',
+          });"""
+          if old not in text:
+              raise SystemExit('Twiggy info block not found')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              "if ($action eq 'settings') { print 'Twiggy::Server, process=1, explicit-only'; exit 0; }",
+              "if ($action eq 'settings') { print 'Twiggy::Server, HTTP/1.0, closes-after-response, unsupported-for-persistent-http1'; exit 0; }",
+              1,
+          )
+          server.write_text(text)
+
+          twiggy = Path('benchmarks/http/servers/twiggy/README.md')
+          twiggy.write_text('''# Twiggy benchmark target
+
+Runner key: `twiggy`
+
+Adapter: `twiggy-http.pl`
+
+Twiggy is retained as a documented HTTP target, but stock Twiggy cannot participate in this benchmark's persistent HTTP/1.1 workload.
+
+## Install
+
+Install Twiggy with your normal CPAN client:
+
+```sh
+cpanm Twiggy
+```
+
+Twiggy will install its normal AnyEvent dependencies.
+
+Verify it:
+
+```sh
+perl -MTwiggy -e 'print "$Twiggy::VERSION\\n"'
+```
+
+## Persistent HTTP/1.1 compatibility
+
+The HTTP comparison in this directory intentionally reuses persistent HTTP/1.1 connections. Current stock Twiggy does not provide that behavior through `Twiggy::Server`:
+
+- its response formatter emits an `HTTP/1.0` status line;
+- the normal PSGI array-response path shuts down and closes the socket after the response body;
+- the streaming writer also shuts down its socket when the writer is closed.
+
+Because of that protocol behavior, Benchmark::Web marks Twiggy as unsupported for this particular workload before measurement begins. It does **not** patch Twiggy, reconnect after every response only for Twiggy, or otherwise change the workload to manufacture a superficially comparable number.
+
+If Benchmark::Web gains a connection-per-request HTTP workload in the future, this adapter can be used there without compromising the persistent-connection comparison.
+
+## What happens if Twiggy is selected
+
+In a mixed non-strict matrix, Twiggy is reported as skipped with the incompatibility reason and compatible targets continue normally.
+
+With `--strict`, selecting Twiggy fails before measurement with the same reason. This is deliberate: strict mode means every requested target must satisfy the workload contract.
+
+The adapter uses `Twiggy::Server` directly and consumes request bodies before returning the fixed PSGI response. It remains here to document the normal API and to support future compatible workload families.
+
+## Launcher interface
+
+This directory is self-contained behind `server.pl`. The central HTTP runner discovers this directory automatically and uses the standard `info`, `probe`, `prepare`, `version`, `settings`, `run`, and `cleanup` actions. Target-specific setup belongs in `server.pl`; `run.pl` does not contain special cases for this server.
+''')
+
+          readme = Path('benchmarks/http/README.md')
+          text = readme.read_text()
+          text = text.replace(
+              '| `twiggy` | Twiggy/AnyEvent | explicit-only | [servers/twiggy/README.md](servers/twiggy/README.md) |',
+              '| `twiggy` | Twiggy/AnyEvent | unsupported for persistent HTTP/1.1 | [servers/twiggy/README.md](servers/twiggy/README.md) |',
+              1,
+          )
+          text = text.replace(
+              "Twiggy is explicit-only because its current behavior does not complete this benchmark's long-lived keep-alive workload reliably. libh2o is explicit-only because it is a lower-level protocol/server reference rather than a peer application API.",
+              "Twiggy is retained as a documented target but is unsupported for this workload because stock `Twiggy::Server` emits HTTP/1.0 and closes the socket after each response, while this benchmark requires persistent HTTP/1.1 connections. libh2o is explicit-only because it is a lower-level protocol/server reference rather than a peer application API.",
+              1,
+          )
+          text = text.replace(
+              'Unavailable targets are skipped unless `--strict` is used.',
+              'Unavailable or workload-incompatible targets are skipped unless `--strict` is used.',
+              1,
+          )
+          readme.write_text(text)
+          PY
+
+          perl -c benchmarks/http/run.pl
+          for launcher in benchmarks/http/servers/*/server.pl; do perl -c "$launcher"; done
+          git diff --check
+          git diff
+
+      - name: Commit implementation
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add benchmarks/http/run.pl benchmarks/http/README.md benchmarks/http/servers/twiggy
+          git commit -m 'Handle workload-incompatible HTTP targets'
+          git push origin HEAD:fix/twiggy-persistent-contract
