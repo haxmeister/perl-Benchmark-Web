@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   verify-linuxevent:
-    if: github.event.head_commit.message == 'Diagnose LinuxEvent source probe'
+    if: github.event.head_commit.message == 'Retest LinuxEvent self-contained source setup'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -37,25 +37,20 @@ jobs:
           perl Makefile.PL
           make -j2
 
-      - name: Diagnose source checkout loading
+      - name: Configure target-local source checkout
         shell: bash
         run: |
-          set +e
-          root="$GITHUB_WORKSPACE/linuxevent-http"
-          lib="$root/blib/lib"
-          arch="$root/blib/arch"
-          printf '%s\n' "$root" > benchmarks/http/servers/linuxevent/source-root
-          echo 'direct module check:'
-          perl -I"$lib" -I"$arch" \
-            -MLinux::Event::Loop \
-            -MLinux::Event::Net::HTTP::Connection \
-            -MLinux::Event::Net::HTTP::Server \
-            -e 'print "direct-ok\n"'
-          echo "direct_status=$?"
-          echo 'launcher probe:'
+          set -euo pipefail
+          printf '%s\n' "$GITHUB_WORKSPACE/linuxevent-http" > benchmarks/http/servers/linuxevent/source-root
+          test -z "${BENCH_LINUXEVENT_ROOT:-}"
           perl benchmarks/http/servers/linuxevent/server.pl probe
-          echo "probe_status=$?"
-          echo 'launcher version:'
           perl benchmarks/http/servers/linuxevent/server.pl version
-          echo "version_status=$?"
-          exit 0
+          perl benchmarks/http/servers/linuxevent/server.pl settings
+
+      - name: Smoke LinuxEvent through generic runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${BENCH_LINUXEVENT_ROOT:-}"
+          perl benchmarks/http/run.pl --servers=linuxevent --smoke --strict
+          perl benchmarks/http/run.pl --servers=linuxevent --smoke --strict --request-body-bytes=4096
