@@ -108,6 +108,12 @@ jobs:
             >/tmp/twiggy-strict.out 2>&1
           strict_status=$?
           set -e
+
+          echo "only_status=$only_status"
+          cat /tmp/twiggy-only.out
+          echo "strict_status=$strict_status"
+          cat /tmp/twiggy-strict.out
+
           test "$only_status" -ne 0
           test "$strict_status" -ne 0
           grep -F 'persistent HTTP/1.1' /tmp/twiggy-only.out
