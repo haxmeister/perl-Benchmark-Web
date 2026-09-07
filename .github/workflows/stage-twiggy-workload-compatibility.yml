@@ -1,0 +1,131 @@
+name: Stage Twiggy workload compatibility
+
+on:
+  push:
+    branches:
+      - fix/twiggy-workload-compatibility
+
+permissions:
+  contents: write
+
+jobs:
+  stage-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/twiggy-workload-compatibility
+
+      - name: Apply generic workload compatibility metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if new in text:
+                  return
+              if old not in text:
+                  raise SystemExit(f"expected text not found in {path}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'benchmarks/http/run.pl',
+              """for my $name (@servers) {\n    if (!launcher_ok($name, 'probe')) {\n""",
+              """for my $name (@servers) {\n    if (!$server{$name}{workload_supported}) {\n        push @skipped, $name;\n        $skip_reason{$name} = 'unsupported workload: ' . $server{$name}{workload_unsupported_reason};\n        next;\n    }\n    if (!launcher_ok($name, 'probe')) {\n""",
+          )
+
+          replace_once(
+              'benchmarks/http/run.pl',
+              """die \"no requested benchmark servers are available\\n\" if !@available;\n""",
+              """if (!@available) {\n    die \"no requested benchmark servers are available: \"\n        . join(', ', map { \"$_ ($skip_reason{$_})\" } @skipped)\n        . \"\\n\";\n}\n""",
+          )
+
+          replace_once(
+              'benchmarks/http/run.pl',
+              """        my $order = defined($info->{order}) ? 0 + $info->{order} : 1000;\n        $found{$key} = {\n            label => \"$info->{label}\",\n            default => $info->{default} ? 1 : 0,\n            order => $order,\n            launcher => $launcher,\n        };\n""",
+              """        my $workload_supported = exists($info->{workload_supported})\n            ? ($info->{workload_supported} ? 1 : 0)\n            : 1;\n        my $workload_unsupported_reason = '';\n        if (!$workload_supported) {\n            die \"benchmark server $key: info.workload_unsupported_reason is required when workload_supported is false\\n\"\n                if !defined($info->{workload_unsupported_reason})\n                    || ref($info->{workload_unsupported_reason})\n                    || $info->{workload_unsupported_reason} eq '';\n            $workload_unsupported_reason = \"$info->{workload_unsupported_reason}\";\n        }\n\n        my $order = defined($info->{order}) ? 0 + $info->{order} : 1000;\n        $found{$key} = {\n            label => \"$info->{label}\",\n            default => $info->{default} ? 1 : 0,\n            order => $order,\n            workload_supported => $workload_supported,\n            workload_unsupported_reason => $workload_unsupported_reason,\n            launcher => $launcher,\n        };\n""",
+          )
+
+          replace_once(
+              'benchmarks/http/servers/twiggy/server.pl',
+              """    print JSON::PP->new->canonical->encode({ label => 'Twiggy/AnyEvent', default => JSON::PP::false, order => 80 });\n""",
+              """    print JSON::PP->new->canonical->encode({\n        label => 'Twiggy/AnyEvent',\n        default => JSON::PP::false,\n        order => 80,\n        workload_supported => JSON::PP::false,\n        workload_unsupported_reason => 'stock Twiggy closes the connection after each response; this benchmark requires persistent HTTP/1.1 connections',\n    });\n""",
+          )
+
+          replace_once(
+              'benchmarks/http/servers/twiggy/README.md',
+              """Twiggy is explicit-only because current Twiggy behavior closes the long-lived keep-alive connections used by this workload before the requested phase completes reliably. Keep that limitation attached to Twiggy-specific results rather than treating an incomplete run as comparable throughput.\n\nThe adapter uses `Twiggy::Server` directly and consumes request bodies before returning the fixed PSGI response.\n""",
+              """Stock Twiggy is incompatible with this benchmark's persistent HTTP/1.1 connection contract: it closes the connection after each response. The target therefore declares this workload unsupported in `server.pl info`.\n\nA non-strict mixed matrix skips Twiggy before starting it and records the reason in the terminal summary and JSON report. Selecting Twiggy with `--strict`, or selecting only Twiggy, fails immediately with that reason instead of failing midway with `server closed connection before benchmark phase completed`.\n\nThe adapter remains in the repository for documentation and for a future benchmark family whose connection lifecycle matches Twiggy.\n""",
+          )
+
+          replace_once(
+              'benchmarks/http/README.md',
+              """Twiggy is explicit-only because its current behavior does not complete this benchmark's long-lived keep-alive workload reliably. libh2o is explicit-only because it is a lower-level protocol/server reference rather than a peer application API.\n""",
+              """Twiggy is explicit-only and declares this workload unsupported because stock Twiggy closes the connection after each response, while this benchmark requires persistent HTTP/1.1 connections. libh2o is explicit-only because it is a lower-level protocol/server reference rather than a peer application API.\n""",
+          )
+
+          replace_once(
+              'benchmarks/http/README.md',
+              """- `info` prints one JSON object with at least `label`; `default` selects whether the target joins the default matrix, and `order` controls stable display order.\n""",
+              """- `info` prints one JSON object with at least `label`; `default` selects whether the target joins the default matrix, and `order` controls stable display order. A target that cannot satisfy this benchmark family's workload contract can set `workload_supported` to false and provide `workload_unsupported_reason`; the runner then skips or rejects it before `probe`, `prepare`, or `run`.\n""",
+          )
+          PY
+
+      - name: Verify generic skip and strict behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          perl -c benchmarks/http/run.pl
+          perl benchmarks/http/servers/twiggy/server.pl info \
+            | python3 -c 'import json,sys; x=json.load(sys.stdin); assert x["workload_supported"] is False; assert "persistent HTTP/1.1" in x["workload_unsupported_reason"]'
+
+          perl benchmarks/http/run.pl \
+            --servers=node,twiggy \
+            --smoke \
+            --json=/tmp/twiggy-skip.json \
+            | tee /tmp/twiggy-mixed.out
+          grep -F 'Servers skipped:' /tmp/twiggy-mixed.out
+          grep -F 'unsupported workload:' /tmp/twiggy-mixed.out
+          ! grep -F 'server closed connection before benchmark phase completed' /tmp/twiggy-mixed.out
+          python3 - <<'PY'
+          import json
+          with open('/tmp/twiggy-skip.json') as fh:
+              report = json.load(fh)
+          assert report['configuration']['skipped'] == ['twiggy']
+          assert 'persistent HTTP/1.1' in report['configuration']['skipped_reasons']['twiggy']
+          PY
+
+          set +e
+          perl benchmarks/http/run.pl --servers=twiggy --smoke \
+            >/tmp/twiggy-only.out 2>&1
+          only_status=$?
+          perl benchmarks/http/run.pl --servers=node,twiggy --smoke --strict \
+            >/tmp/twiggy-strict.out 2>&1
+          strict_status=$?
+          set -e
+          test "$only_status" -ne 0
+          test "$strict_status" -ne 0
+          grep -F 'persistent HTTP/1.1' /tmp/twiggy-only.out
+          grep -F 'unsupported workload:' /tmp/twiggy-strict.out
+          ! grep -F 'server closed connection before benchmark phase completed' /tmp/twiggy-only.out
+          ! grep -F 'server closed connection before benchmark phase completed' /tmp/twiggy-strict.out
+
+      - name: Commit staged implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add benchmarks/http/run.pl benchmarks/http/README.md \
+            benchmarks/http/servers/twiggy/server.pl \
+            benchmarks/http/servers/twiggy/README.md
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name 'Benchmark::Web CI'
+          git config user.email 'actions@users.noreply.github.com'
+          git commit -m 'Skip targets incompatible with HTTP workload'
+          git push origin HEAD:fix/twiggy-workload-compatibility
