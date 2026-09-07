@@ -1,54 +1,106 @@
 # Benchmark::Web
 
-A standalone, reproducible HTTP server comparison benchmark.
+Benchmark::Web is a neutral collection of reproducible benchmarks for Perl web,
+networking, event-loop, and asynchronous systems, with selected non-Perl
+implementations included where they provide useful reference points.
 
-This repository exists so HTTP server authors and users can run the same raw-client workload against multiple implementations and contribute new adapters without depending on any one server project.
+It is **not** tied to one HTTP server, event loop, or async framework.
 
-**No benchmark competitor is a project dependency.** Linux::Event::Net::HTTP, Hyperman, Feersum, Mojolicious, Twiggy, Node.js, Go, aiohttp, and libh2o are all optional. Missing competitors are skipped unless `--strict` is requested.
+The repository is organized by benchmark family so each comparison has its own
+workload contract, adapters, documentation, and result interpretation.
 
-## Quick start
+## Benchmark families
 
-```sh
-perl run.pl --smoke
+### HTTP server comparison
+
+[`benchmarks/http/`](benchmarks/http/)
+
+Cross-server HTTP/1.1 throughput and client-visible latency using one shared raw
+client and the same request/response workload for every server.
+
+Current adapters include Linux::Event::Net::HTTP, Hyperman, Feersum,
+Mojolicious, Node.js, Go, aiohttp, and optional reference servers.
+
+**Linux::Event is not required. Hyperman is not required. No benchmarked server
+is a project dependency.**
+
+### Async and event-loop comparisons
+
+[`benchmarks/async/`](benchmarks/async/)
+
+This family is intended for comparisons that are not HTTP benchmarks: event
+loops, callback dispatch, futures/awaitables, async I/O, stream workloads,
+latency under concurrency, and related primitives.
+
+The exact workloads should be documented individually rather than forcing unlike
+async systems into one vague score.
+
+## Repository layout
+
+```text
+benchmarks/
+    http/
+        README.md
+        run.pl
+        servers/
+    async/
+        README.md
 ```
 
-Compare Hyperman with other Perl servers without Linux::Event installed:
+Additional benchmark families can be added when they have a distinct workload
+contract. Examples might include streams, WebSocket, timers, scheduling, or
+socket lifecycle benchmarks.
 
-```sh
-perl run.pl \
-  --servers=hyperman,feersum,mojo \
-  --requests=50000 \
-  --warmup=5000 \
-  --connections=100 \
-  --repeats=5
-```
+## Principles
 
-See [docs/HTTP-COMPARISON.md](docs/HTTP-COMPARISON.md) for the benchmark contract, every setting, installation examples, fairness rules, and guidance for publishing results.
+### Competitors are optional
 
-## Current HTTP/1.1 adapters
+A benchmark target must not become a required dependency merely because we want
+to measure it. Runners should detect available implementations and either skip
+missing ones or fail only when the user explicitly requests strict availability.
 
-- Linux::Event::Net::HTTP
-- Hyperman
-- Feersum
-- Mojolicious
-- Twiggy/AnyEvent (explicit-only)
-- Node.js `http`
-- Go `net/http`
-- Python aiohttp
-- libh2o evloop (explicit-only reference)
+### One benchmark, one stated question
+
+A benchmark should say exactly what it measures. HTTP request throughput,
+callback dispatch, future completion, stream framing, and worker scaling are
+different questions and should not be collapsed into one number.
+
+### Shared workload before shared conclusions
+
+Where systems are compared directly, they should receive the same workload from
+the same client/driver whenever practical. Differences that cannot be normalized
+should be documented rather than hidden.
+
+### Reproducibility over impressive numbers
+
+Benchmark settings, runtime/framework versions, OS/kernel information, and raw
+machine-readable results should be retainable. Multiple repeats and medians are
+preferred over best-of runs.
+
+### Public benchmarks should explain themselves
+
+Every benchmark family should have its own README containing:
+
+- what question the benchmark answers;
+- the workload contract;
+- every command-line setting;
+- installation/runtime requirements;
+- fairness constraints;
+- copy-paste examples;
+- guidance for interpreting and publishing results.
 
 ## Contributing
 
-New server adapters are welcome. An adapter should:
+Contributions are welcome, especially adapters from the authors or maintainers of
+the systems being measured.
 
-1. listen on `127.0.0.1:$ENV{BENCH_PORT}`;
-2. consume the complete request body before responding;
-3. return HTTP 200 with exactly `$ENV{BENCH_RESPONSE_BYTES}` bytes;
-4. use a fixed `Content-Length`;
-5. run one server process and one application execution slot for the primary comparison;
-6. avoid access logging, compression, TLS, or unrelated middleware unless that is the benchmark being studied;
-7. use the smallest normal public API of the server being measured.
+When adding a benchmark target, use that project's normal public API and avoid
+artificially handicapping or specially optimizing one competitor. If a project
+has a recommended benchmark configuration that still fits the benchmark's
+contract, document why it is used.
 
-Add the adapter under `servers/`, register it in `run.pl`, document any runtime requirements, and verify it with `perl run.pl --servers=yourserver --smoke --strict`.
+Keep dependencies optional. A contributor should be able to work on one
+benchmark family without installing every framework represented elsewhere in the
+repository.
 
-Please keep benchmark dependencies optional. Do not add a server implementation as a required dependency of this repository merely so its adapter can run.
+See the README inside each benchmark family for its specific adapter contract.
