@@ -22,14 +22,14 @@ if ($action eq 'probe') {
     system 'cc', '--version';
     exit 1 if $? != 0;
     system 'pkg-config', '--exists', 'libh2o-evloop';
-    exit $? == 0 ? 0 : 1;
+    exit(($? == 0) ? 0 : 1);
 }
 if ($action eq 'prepare') {
     my $flags = `pkg-config --cflags --libs libh2o-evloop 2>/dev/null`;
     exit 1 if $? != 0;
     my @flags = grep { length } split /\s+/, $flags;
     system 'cc', '-O2', '-o', $binary, "$Bin/libh2o-http.c", @flags;
-    exit $? == 0 ? 0 : 1;
+    exit(($? == 0) ? 0 : 1);
 }
 if ($action eq 'cleanup') {
     unlink $binary if -e $binary;
