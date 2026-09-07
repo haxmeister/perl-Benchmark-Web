@@ -1,0 +1,63 @@
+name: LinuxEvent source smoke
+
+on:
+  push:
+    branches:
+      - verify/linuxevent-http-smoke
+
+permissions:
+  contents: read
+
+jobs:
+  linuxevent-source-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: benchmark-web
+
+      - uses: actions/checkout@v4
+        with:
+          repository: haxmeister/perl-Linux-Event-Net-HTTP
+          ref: main
+          path: linuxevent-http
+
+      - name: Install optional benchmark targets
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cpanminus build-essential
+          sudo cpanm --notest Linux::Event Hyperman Feersum Mojolicious
+          python3 -m venv /tmp/benchmark-web-venv
+          /tmp/benchmark-web-venv/bin/pip install aiohttp
+
+      - name: Build Linux::Event::Net::HTTP checkout
+        shell: bash
+        run: |
+          cd linuxevent-http
+          perl Makefile.PL
+          make -j2
+
+      - name: Smoke full default comparison from source checkout
+        shell: bash
+        run: |
+          cd benchmark-web
+          PATH="/tmp/benchmark-web-venv/bin:$PATH" \
+          BENCH_LINUXEVENT_ROOT="$GITHUB_WORKSPACE/linuxevent-http" \
+            perl benchmarks/http/run.pl \
+              --servers=linuxevent,hyperman,feersum,mojo,node,go,aiohttp \
+              --smoke \
+              --strict
+
+      - name: Exercise body-bearing Linux::Event adapter
+        shell: bash
+        run: |
+          cd benchmark-web
+          PATH="/tmp/benchmark-web-venv/bin:$PATH" \
+          BENCH_LINUXEVENT_ROOT="$GITHUB_WORKSPACE/linuxevent-http" \
+            perl benchmarks/http/run.pl \
+              --servers=linuxevent,hyperman,feersum,mojo,node,go,aiohttp \
+              --smoke \
+              --strict \
+              --request-body-bytes=4096
