@@ -29,11 +29,12 @@ From `benchmarks/http/`:
 perl run.pl --servers=go --smoke --strict
 ```
 
-`run.pl` compiles `go-http.go` to a temporary binary before the benchmark and removes that binary afterward.
+`server.pl prepare` compiles `go-http.go` to a temporary binary before the benchmark and `server.pl cleanup` removes that binary afterward.
 
 ## Adapter setup
 
-The adapter calls `runtime.GOMAXPROCS(1)` so the comparison remains one application execution slot. It uses the standard `net/http` server, drains request bodies, and returns the fixed response payload.
-\n## Launcher interface
+The launcher sets `GOMAXPROCS=1`, and the adapter also calls `runtime.GOMAXPROCS(1)`, so the comparison remains one application execution slot. The adapter uses the standard `net/http` server, drains request bodies, and returns the fixed response payload.
 
-This directory is self-contained behind `server.pl`. The central HTTP runner discovers this directory automatically and uses the standard `info`, `probe`, `prepare`, `version`, `settings`, `run`, and `cleanup` actions. Target-specific setup belongs in `server.pl`; `run.pl` does not contain special cases for this server.\n
+## Launcher interface
+
+This directory is self-contained behind `server.pl`. The central HTTP runner discovers this directory automatically and uses the standard `info`, `probe`, `prepare`, `version`, `settings`, `run`, and `cleanup` actions. Target-specific setup belongs in `server.pl`; `run.pl` does not contain special cases for this server.
