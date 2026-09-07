@@ -37,3 +37,6 @@ Benchmark::Web does not depend on aiohttp. The virtual environment is only a loc
 ## Adapter setup
 
 The adapter uses `aiohttp.web`, disables access logging, consumes request bodies, and returns the fixed benchmark response from `/bench`.
+\n## Launcher interface
+
+This directory is self-contained behind `server.pl`. The central HTTP runner discovers this directory automatically and uses the standard `info`, `probe`, `prepare`, `version`, `settings`, `run`, and `cleanup` actions. Target-specific setup belongs in `server.pl`; `run.pl` does not contain special cases for this server.\n

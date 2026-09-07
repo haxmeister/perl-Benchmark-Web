@@ -28,6 +28,25 @@ Every benchmark family should document:
 - how results should be interpreted;
 - how to retain machine-readable results where supported.
 
+## Adding an HTTP server competitor
+
+HTTP competitors are plug-ins at the filesystem level. Create:
+
+```text
+benchmarks/http/servers/<key>/
+    README.md
+    server.pl
+    ... any adapter/source files needed by that target ...
+```
+
+Do not edit `benchmarks/http/run.pl` to register your server. The runner discovers `server.pl` automatically.
+
+Your `server.pl` must implement the standard `info`, `probe`, `prepare`, `version`, `settings`, `run`, and `cleanup` actions documented in `benchmarks/http/README.md`. Put target-specific dependency checks, build steps, environment setup, runtime flags, source-tree detection, and temporary-artifact cleanup there. The central runner should not learn framework-specific setup rules.
+
+`README.md` in the same directory should explain how to install that target, verify it, run its one-target smoke test, and describe any tuning or fairness-relevant settings applied by the launcher or adapter.
+
+Whether a target joins the default matrix is metadata returned by `server.pl info`; it is not a hard-coded list in `run.pl`.
+
 ## Adding a competitor
 
 Prefer the smallest normal public API of the project being measured.

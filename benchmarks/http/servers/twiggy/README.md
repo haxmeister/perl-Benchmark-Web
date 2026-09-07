@@ -35,3 +35,6 @@ perl run.pl --servers=twiggy --smoke --strict
 Twiggy is explicit-only because current Twiggy behavior closes the long-lived keep-alive connections used by this workload before the requested phase completes reliably. Keep that limitation attached to Twiggy-specific results rather than treating an incomplete run as comparable throughput.
 
 The adapter uses `Twiggy::Server` directly and consumes request bodies before returning the fixed PSGI response.
+\n## Launcher interface
+
+This directory is self-contained behind `server.pl`. The central HTTP runner discovers this directory automatically and uses the standard `info`, `probe`, `prepare`, `version`, `settings`, `run`, and `cleanup` actions. Target-specific setup belongs in `server.pl`; `run.pl` does not contain special cases for this server.\n

@@ -42,3 +42,6 @@ perl run.pl \
 ## Adapter setup
 
 The adapter uses Hyperman's PSGI-style application API. It configures `workers => 1` so the benchmark stays in one process/application execution slot and explicitly disables compression. For very large benchmark request bodies it raises Hyperman's body limit enough to accept the configured workload.
+\n## Launcher interface
+
+This directory is self-contained behind `server.pl`. The central HTTP runner discovers this directory automatically and uses the standard `info`, `probe`, `prepare`, `version`, `settings`, `run`, and `cleanup` actions. Target-specific setup belongs in `server.pl`; `run.pl` does not contain special cases for this server.\n

@@ -70,3 +70,6 @@ The runner compiles `libh2o-http.c` to a temporary binary using the flags return
 ## Compatibility note
 
 A successful `pkg-config --modversion libh2o-evloop` proves that the library installation is visible to the benchmark. If the adapter's compile/link step then fails, that is a libh2o API/ABI compatibility problem in the adapter rather than an installation-detection failure. Current upstream compatibility is tracked separately from these installation instructions.
+\n## Launcher interface
+
+This directory is self-contained behind `server.pl`. The central HTTP runner discovers this directory automatically and uses the standard `info`, `probe`, `prepare`, `version`, `settings`, `run`, and `cleanup` actions. Target-specific setup belongs in `server.pl`; `run.pl` does not contain special cases for this server.\n

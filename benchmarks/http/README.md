@@ -43,6 +43,8 @@ perl run.pl \
 
 Each target lives in its own directory. Its README owns installation instructions, setup details, adapter-specific settings, and a one-target smoke-test command.
 
+`run.pl` does not contain a registry of server implementations. It discovers subdirectories containing `server.pl`, reads their metadata, probes them, prepares them, and launches them through the same interface. Adding a conforming server directory does not require editing `run.pl`.
+
 | key | server | selection | setup and adapter notes |
 | --- | --- | --- | --- |
 | `linuxevent` | Linux::Event::Net::HTTP | default | [servers/linuxevent/README.md](servers/linuxevent/README.md) |
@@ -301,6 +303,34 @@ For public results:
 - distinguish directional shared-CI results from dedicated-machine measurements.
 
 GitHub-hosted runner throughput is useful for regression direction and correctness, but absolute numbers can vary substantially between runner instances.
+
+## Server launcher contract
+
+Every directory directly under `servers/` that participates in the matrix must contain a Perl launcher named `server.pl`. The directory name is the runner key. `run.pl` invokes every target through the same actions:
+
+```text
+perl servers/<key>/server.pl info
+perl servers/<key>/server.pl probe
+perl servers/<key>/server.pl prepare
+perl servers/<key>/server.pl version
+perl servers/<key>/server.pl settings
+perl servers/<key>/server.pl run
+perl servers/<key>/server.pl cleanup
+```
+
+The actions mean:
+
+- `info` prints one JSON object with at least `label`; `default` selects whether the target joins the default matrix, and `order` controls stable display order.
+- `probe` exits zero when the target can be used on this machine and nonzero otherwise.
+- `prepare` performs target-specific setup such as compiling a temporary helper binary. It exits zero on success.
+- `version` prints the target/runtime version used for the JSON report.
+- `settings` prints a short human-readable summary of fairness-relevant target setup. It is included in the terminal summary and JSON report.
+- `run` starts the server and does not return until the benchmark terminates it.
+- `cleanup` removes temporary target-specific build artifacts and should succeed when there is nothing to remove.
+
+`run.pl` supplies the benchmark workload inputs uniformly through `BENCH_PORT`, `BENCH_RESPONSE_BYTES`, and `BENCH_REQUEST_BODY_BYTES` when it invokes `run`. Those are part of the benchmark launcher contract. Any additional environment variables, runtime flags, build commands, source-checkout discovery, or other setup required by a particular implementation belongs inside that implementation's `server.pl`, not in `run.pl`.
+
+A contributor may use any files they need inside their own server directory. Only `server.pl` and the benchmark protocol contract are visible to the central runner.
 
 ## Adapter contract
 

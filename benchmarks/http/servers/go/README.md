@@ -34,3 +34,6 @@ perl run.pl --servers=go --smoke --strict
 ## Adapter setup
 
 The adapter calls `runtime.GOMAXPROCS(1)` so the comparison remains one application execution slot. It uses the standard `net/http` server, drains request bodies, and returns the fixed response payload.
+\n## Launcher interface
+
+This directory is self-contained behind `server.pl`. The central HTTP runner discovers this directory automatically and uses the standard `info`, `probe`, `prepare`, `version`, `settings`, `run`, and `cleanup` actions. Target-specific setup belongs in `server.pl`; `run.pl` does not contain special cases for this server.\n

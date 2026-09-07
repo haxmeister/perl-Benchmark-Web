@@ -71,3 +71,6 @@ For requests with bodies, `natural` defers the response until `on_request_end` s
 `BENCH_READ_BUDGET_BYTES` is passed through as the connection class `read_budget_bytes` stream option. It defaults to `0`.
 
 Do not mix Linux::Event modes in one published result without labeling them separately.
+\n## Launcher interface
+
+This directory is self-contained behind `server.pl`. The central HTTP runner discovers this directory automatically and uses the standard `info`, `probe`, `prepare`, `version`, `settings`, `run`, and `cleanup` actions. Target-specific setup belongs in `server.pl`; `run.pl` does not contain special cases for this server.\n
