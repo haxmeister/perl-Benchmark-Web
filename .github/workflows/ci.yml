@@ -1,0 +1,84 @@
+name: Benchmark checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  baseline-http-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check runner and built-in adapter syntax
+        shell: bash
+        run: |
+          perl -c benchmarks/http/run.pl
+          node --check benchmarks/http/servers/node-http.js
+          python3 -m py_compile benchmarks/http/servers/aiohttp-http.py
+          go build -o /tmp/benchmark-web-go-syntax benchmarks/http/servers/go-http.go
+
+      - name: Smoke comparison without Linux::Event
+        shell: bash
+        run: |
+          perl benchmarks/http/run.pl \
+            --servers=node,go \
+            --smoke \
+            --strict \
+            --json=/tmp/http-smoke.json
+          test -s /tmp/http-smoke.json
+
+      - name: Exercise request-body contract without Linux::Event
+        shell: bash
+        run: |
+          perl benchmarks/http/run.pl \
+            --servers=node,go \
+            --smoke \
+            --strict \
+            --request-body-bytes=4096
+
+  optional-http-adapters:
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install optional benchmark targets
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cpanminus build-essential
+          sudo cpanm --notest Hyperman Feersum Mojolicious
+          python3 -m venv /tmp/benchmark-web-venv
+          /tmp/benchmark-web-venv/bin/pip install aiohttp
+
+      - name: Check optional Perl adapter syntax
+        shell: bash
+        run: |
+          perl -c benchmarks/http/servers/hyperman-http.pl
+          perl -c benchmarks/http/servers/feersum-http.pl
+          perl -c benchmarks/http/servers/mojo-http.pl
+
+      - name: Smoke selected public comparison
+        shell: bash
+        run: |
+          PATH="/tmp/benchmark-web-venv/bin:$PATH" \
+            perl benchmarks/http/run.pl \
+              --servers=hyperman,feersum,mojo,node,go,aiohttp \
+              --smoke \
+              --strict
+
+      - name: Exercise selected request-body contract
+        shell: bash
+        run: |
+          PATH="/tmp/benchmark-web-venv/bin:$PATH" \
+            perl benchmarks/http/run.pl \
+              --servers=hyperman,feersum,mojo,node,go,aiohttp \
+              --smoke \
+              --strict \
+              --request-body-bytes=4096
