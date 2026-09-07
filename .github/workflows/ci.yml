@@ -14,13 +14,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check runner and built-in adapter syntax
+      - name: Check runner and launcher contract
         shell: bash
         run: |
+          set -euo pipefail
           perl -c benchmarks/http/run.pl
+          for launcher in benchmarks/http/servers/*/server.pl; do
+            perl -c "$launcher"
+            perl "$launcher" info | python3 -c 'import json,sys; x=json.load(sys.stdin); assert isinstance(x.get("label"), str) and x["label"]'
+          done
+          perl benchmarks/http/run.pl --help | grep -F 'discovered server keys'
           node --check benchmarks/http/servers/node/node-http.js
           python3 -m py_compile benchmarks/http/servers/aiohttp/aiohttp-http.py
           go build -o /tmp/benchmark-web-go-syntax benchmarks/http/servers/go/go-http.go
+
+      - name: Prove folder-only server discovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          before=$(sha256sum benchmarks/http/run.pl)
+          cp -a benchmarks/http/servers/node benchmarks/http/servers/discovery-test
+          perl benchmarks/http/run.pl \
+            --servers=discovery-test \
+            --smoke \
+            --strict | tee /tmp/http-discovery-smoke.out
+          grep -F 'Node.js http' /tmp/http-discovery-smoke.out
+          rm -rf benchmarks/http/servers/discovery-test
+          after=$(sha256sum benchmarks/http/run.pl)
+          test "$before" = "$after"
 
       - name: Smoke comparison without Linux::Event
         shell: bash
@@ -38,7 +59,16 @@ jobs:
           grep -F 'Pipeline depth:' /tmp/http-smoke.out
           grep -F 'Request:' /tmp/http-smoke.out
           grep -F 'Response:' /tmp/http-smoke.out
+          grep -F 'Target setup:' /tmp/http-smoke.out
           grep -F 'MEDIAN RESULTS' /tmp/http-smoke.out
+          python3 - <<'PY'
+          import json
+          with open('/tmp/http-smoke.json') as fh:
+              report = json.load(fh)
+          assert 'servers' in report['environment']
+          assert 'node' in report['environment']['servers']
+          assert 'go' in report['environment']['servers']
+          PY
 
       - name: Exercise request-body contract without Linux::Event
         shell: bash
