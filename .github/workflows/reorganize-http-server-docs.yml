@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   reorganize:
-    if: github.event.head_commit.message == 'Fix HTTP documentation staging workflow'
+    if: github.event.head_commit.message == 'Allow docs staging push without workflow changes'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,12 +25,14 @@ jobs:
         run: |
           perl -c benchmarks/http/run.pl
           node --check benchmarks/http/servers/node/node-http.js
-          python3 -m py_compile benchmarks/http/servers/aiohttp/aiohttp-http.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile benchmarks/http/servers/aiohttp/aiohttp-http.py
           go build -o /tmp/benchmark-web-go-layout-check benchmarks/http/servers/go/go-http.go
 
       - name: Commit result
         shell: bash
         run: |
+          git checkout -- .github/workflows/ci.yml
+          rm -rf benchmarks/http/servers/aiohttp/__pycache__
           git config user.name 'Benchmark::Web CI'
           git config user.email 'actions@users.noreply.github.com'
           git add -A
