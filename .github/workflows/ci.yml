@@ -29,8 +29,16 @@ jobs:
             --servers=node,go \
             --smoke \
             --strict \
-            --json=/tmp/http-smoke.json
+            --json=/tmp/http-smoke.json | tee /tmp/http-smoke.out
           test -s /tmp/http-smoke.json
+          grep -F 'Benchmark::Web - HTTP/1.1 Cross-Server Comparison' /tmp/http-smoke.out
+          grep -F 'SMOKE - correctness check only' /tmp/http-smoke.out
+          grep -F 'Measured requests/repeat:' /tmp/http-smoke.out
+          grep -F 'Warmup requests/repeat:' /tmp/http-smoke.out
+          grep -F 'Pipeline depth:' /tmp/http-smoke.out
+          grep -F 'Request:' /tmp/http-smoke.out
+          grep -F 'Response:' /tmp/http-smoke.out
+          grep -F 'MEDIAN RESULTS' /tmp/http-smoke.out
 
       - name: Exercise request-body contract without Linux::Event
         shell: bash
@@ -39,7 +47,8 @@ jobs:
             --servers=node,go \
             --smoke \
             --strict \
-            --request-body-bytes=4096
+            --request-body-bytes=4096 | tee /tmp/http-body-smoke.out
+          grep -E 'Request: +POST /bench, body=4096 bytes' /tmp/http-body-smoke.out
 
   optional-http-adapters:
     continue-on-error: true
