@@ -44,6 +44,8 @@ Do not make Hyperman, Linux::Event, Feersum, Mojolicious, Twiggy, aiohttp, or an
 
 A runner should detect missing competitors and skip them by default, with a strict mode when a reproducible run requires an exact target set.
 
+CI may install optional benchmark targets temporarily to exercise adapters. That does not make those targets project dependencies: do not add them to core package metadata or assume every contributor has them installed.
+
 ## Results
 
 Do not present smoke tests or one-off shared-CI measurements as authoritative performance results.

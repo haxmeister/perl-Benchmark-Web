@@ -14,10 +14,13 @@ my $app = sub ($env) {
     if (($env->{CONTENT_LENGTH} // 0) > 0) {
         my $remaining = 0 + $env->{CONTENT_LENGTH};
         my $input = $env->{'psgi.input'};
+        die "missing benchmark request body\n" if !defined $input;
         while ($remaining > 0) {
+            my $want = $remaining > 65_536 ? 65_536 : $remaining;
             my $buf = '';
-            my $n = $input->read($buf, $remaining);
-            last if !defined($n) || $n <= 0;
+            my $n = $input->read($buf, $want);
+            die "short benchmark request body\n"
+                if !defined($n) || $n <= 0;
             $remaining -= $n;
         }
     }

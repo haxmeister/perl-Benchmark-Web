@@ -248,6 +248,8 @@ By default unavailable competitors are skipped.
 perl run.pl --servers=hyperman,feersum,mojo --strict
 ```
 
+`--no-strict` explicitly restores the default skip behavior.
+
 ### `--json=PATH`
 
 Writes a machine-readable report containing:
@@ -358,6 +360,33 @@ BENCH_LINUXEVENT_ROOT=/path/to/perl-Linux-Event-Net-HTTP \
 ```
 
 This variable changes only the Linux::Event adapter. Do not mix different Linux::Event modes into one published result without labeling them separately.
+
+For body-bearing benchmark requests, the `natural` adapter defers its response until `on_request_end` so the request body is fully consumed before responding. The bodyless default still measures the ordinary early `on_request -> Response->end` path.
+
+## Files in this folder
+
+```text
+README.md
+run.pl
+servers/
+    aiohttp-http.py
+    feersum-http.pl
+    go-http.go
+    hyperman-http.pl
+    libh2o-http.c
+    linuxevent-http.pl
+    mojo-http.pl
+    node-http.js
+    twiggy-http.pl
+```
+
+Nothing outside this directory is required unless you explicitly select an optional target that is not already installed. An uninstalled Linux::Event::Net::HTTP checkout is supplied explicitly with `BENCH_LINUXEVENT_ROOT`.
+
+## Continuous integration
+
+Repository CI uses small correctness workloads, including a required smoke comparison that does not select Linux::Event. Optional Perl-adapter CI may install benchmark targets temporarily to exercise their adapters; those installations are test fixtures, not Benchmark::Web dependencies.
+
+CI throughput is not a publishable performance result.
 
 ## Interpreting results
 
