@@ -35,12 +35,14 @@ cmake -S "$SOURCE" -B "$BUILD" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX="$PREFIX" \
     -DWITHOUT_LIBS=OFF \
-    -DBUILD_SHARED_LIBS=OFF \
+    -DBUILD_SHARED_LIBS=ON \
     -DWITH_MRUBY=OFF \
     -DWITH_BROTLI=OFF \
+    -DWITH_ZSTD=OFF \
     -DWITH_AEGIS=OFF \
     -DWITH_IO_URING=OFF \
-    -DWITH_FUSION=OFF
+    -DWITH_FUSION=OFF \
+    -DWITH_KTLS=OFF
 
 echo "==> building H2O"
 cmake --build "$BUILD" --parallel "$JOBS"
@@ -65,7 +67,19 @@ if [ -z "$PC" ]; then
     exit 1
 fi
 
-echo "==> installed $(dirname "$PC")/libh2o-evloop.pc"
+LIBDIR=$(sed -n 's/^libdir=//p' "$PC" | head -n 1)
+if [ -z "$LIBDIR" ]; then
+    echo "H2O installed, but libdir is missing from $PC" >&2
+    exit 1
+fi
+
+if ! find "$LIBDIR" -maxdepth 1 -type f -o -type l 2>/dev/null \
+    | grep -q '/libh2o-evloop\.so'; then
+    echo "H2O installed, but shared libh2o-evloop was not found under $LIBDIR" >&2
+    exit 1
+fi
+
+echo "==> installed $PC"
 echo "==> verify from benchmarks/http with:"
 echo "    perl servers/h2o/server.pl probe"
 echo "    perl run.pl --servers=h2o --smoke --strict"
