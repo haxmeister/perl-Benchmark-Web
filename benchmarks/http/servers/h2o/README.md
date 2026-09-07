@@ -8,10 +8,20 @@ This target is explicit-only. It measures libh2o's native event-loop HTTP server
 
 ## Required library
 
-The runner requires a C compiler, `pkg-config`, and an installed `libh2o-evloop` that is visible through:
+The target requires a C compiler, `pkg-config`, and an installed `libh2o-evloop`.
+
+`server.pl` handles the common `/usr/local` pkg-config locations itself, including multiarch subdirectories, so normal source installs do not require exporting `PKG_CONFIG_PATH`.
+
+You can check whether the target can see the library with:
 
 ```sh
-pkg-config --modversion libh2o-evloop
+perl servers/h2o/server.pl probe
+```
+
+or, from this directory:
+
+```sh
+perl server.pl probe
 ```
 
 The `libh2o-evloop-dev` package is not available on every Debian-derived release, so do not assume that package name exists on a particular Debian, Ubuntu, or Devuan release.
@@ -38,38 +48,24 @@ sudo make install
 sudo ldconfig
 ```
 
-Verify the library required by Benchmark::Web:
-
-```sh
-pkg-config --modversion libh2o-evloop
-```
-
-If H2O was installed under a custom prefix and `pkg-config` cannot find it, add the prefix's `lib/pkgconfig` directory to `PKG_CONFIG_PATH`. For the common `/usr/local` prefix:
-
-```sh
-export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}
-pkg-config --modversion libh2o-evloop
-```
-
-If your distribution actually provides `libh2o-evloop-dev`, installing that package together with `build-essential` and `pkg-config` is a valid shortcut. Check first with:
-
-```sh
-apt-cache show libh2o-evloop-dev
-```
-
-## Run
-
-From `benchmarks/http/`:
+After installation, return to `benchmarks/http/` and let the target launcher perform detection and compilation:
 
 ```sh
 perl run.pl --servers=h2o --smoke --strict
 ```
 
-The runner compiles `libh2o-http.c` to a temporary binary using the flags returned by `pkg-config --cflags --libs libh2o-evloop`.
+If your distribution actually provides `libh2o-evloop-dev`, installing that package together with `build-essential` and `pkg-config` is also valid. Check first with:
 
-## Compatibility note
+```sh
+apt-cache show libh2o-evloop-dev
+```
 
-A successful `pkg-config --modversion libh2o-evloop` proves that the library installation is visible to the benchmark. If the adapter's compile/link step then fails, that is a libh2o API/ABI compatibility problem in the adapter rather than an installation-detection failure. Current upstream compatibility is tracked separately from these installation instructions.
-\n## Launcher interface
+## Adapter setup
 
-This directory is self-contained behind `server.pl`. The central HTTP runner discovers this directory automatically and uses the standard `info`, `probe`, `prepare`, `version`, `settings`, `run`, and `cleanup` actions. Target-specific setup belongs in `server.pl`; `run.pl` does not contain special cases for this server.\n
+`server.pl prepare` compiles `libh2o-http.c` to a temporary binary using the flags returned by `pkg-config --cflags --libs libh2o-evloop`. `server.pl cleanup` removes that binary after the benchmark.
+
+A successful `probe` means the required compiler and library metadata were found. If `prepare` fails, the runner reports the target as unavailable; compile/link compatibility belongs to this target folder rather than to `run.pl`.
+
+## Launcher interface
+
+This directory is self-contained behind `server.pl`. The central HTTP runner discovers this directory automatically and uses the standard `info`, `probe`, `prepare`, `version`, `settings`, `run`, and `cleanup` actions. Target-specific setup belongs in `server.pl`; `run.pl` does not contain special cases for this server.
