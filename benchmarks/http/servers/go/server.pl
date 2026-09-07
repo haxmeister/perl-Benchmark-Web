@@ -13,11 +13,11 @@ if ($action eq 'info') {
 }
 if ($action eq 'probe') {
     system 'go', 'version';
-    exit $? == 0 ? 0 : 1;
+    exit(($? == 0) ? 0 : 1);
 }
 if ($action eq 'prepare') {
     system 'go', 'build', '-o', $binary, "$Bin/go-http.go";
-    exit $? == 0 ? 0 : 1;
+    exit(($? == 0) ? 0 : 1);
 }
 if ($action eq 'cleanup') { unlink $binary if -e $binary; exit 0; }
 if ($action eq 'version') { exec 'go', 'version'; exit 127; }
