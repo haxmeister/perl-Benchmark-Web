@@ -18,9 +18,9 @@ jobs:
         shell: bash
         run: |
           perl -c benchmarks/http/run.pl
-          node --check benchmarks/http/servers/node-http.js
-          python3 -m py_compile benchmarks/http/servers/aiohttp-http.py
-          go build -o /tmp/benchmark-web-go-syntax benchmarks/http/servers/go-http.go
+          node --check benchmarks/http/servers/node/node-http.js
+          python3 -m py_compile benchmarks/http/servers/aiohttp/aiohttp-http.py
+          go build -o /tmp/benchmark-web-go-syntax benchmarks/http/servers/go/go-http.go
 
       - name: Smoke comparison without Linux::Event
         shell: bash
@@ -69,9 +69,9 @@ jobs:
       - name: Check optional Perl adapter syntax
         shell: bash
         run: |
-          perl -c benchmarks/http/servers/hyperman-http.pl
-          perl -c benchmarks/http/servers/feersum-http.pl
-          perl -c benchmarks/http/servers/mojo-http.pl
+          perl -c benchmarks/http/servers/hyperman/hyperman-http.pl
+          perl -c benchmarks/http/servers/feersum/feersum-http.pl
+          perl -c benchmarks/http/servers/mojo/mojo-http.pl
 
       - name: Smoke selected public comparison
         shell: bash
