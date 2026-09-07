@@ -1,5 +1,7 @@
 benchmarks/http/servers/aiohttp/.venv/
 benchmarks/http/servers/linuxevent/source-root
+benchmarks/http/servers/linuxevent/.source/
+benchmarks/http/servers/linuxevent/.local/
 benchmarks/http/servers/h2o/.source/
 benchmarks/http/servers/h2o/.build/
 benchmarks/http/servers/h2o/.local/
