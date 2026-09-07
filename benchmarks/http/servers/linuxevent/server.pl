@@ -17,7 +17,7 @@ if ($action eq 'info') {
     exit 0;
 }
 if ($action eq 'probe') {
-    exit perl_prefix() ? 0 : 1;
+    exit(perl_prefix() ? 0 : 1);
 }
 if ($action eq 'prepare' || $action eq 'cleanup') {
     exit 0;
