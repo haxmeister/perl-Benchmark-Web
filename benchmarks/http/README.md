@@ -2,7 +2,7 @@
 
 This directory contains the standalone HTTP/1.1 cross-server benchmark for Benchmark::Web.
 
-No server is a dependency of Benchmark::Web. The runner detects the targets available on the machine, skips missing targets by default, and only requires every requested target when `--strict` is used.
+No server is a dependency of Benchmark::Web. The runner discovers targets from `servers/*/server.pl`, skips unavailable targets by default, and only requires every requested target when `--strict` is used.
 
 ## Quick start
 
@@ -43,8 +43,6 @@ perl run.pl \
 
 Each target lives in its own directory. Its README owns installation instructions, setup details, adapter-specific settings, and a one-target smoke-test command.
 
-`run.pl` does not contain a registry of server implementations. It discovers subdirectories containing `server.pl`, reads their metadata, probes them, prepares them, and launches them through the same interface. Adding a conforming server directory does not require editing `run.pl`.
-
 | key | server | selection | setup and adapter notes |
 | --- | --- | --- | --- |
 | `linuxevent` | Linux::Event::Net::HTTP | default | [servers/linuxevent/README.md](servers/linuxevent/README.md) |
@@ -62,6 +60,8 @@ Default target set:
 ```text
 linuxevent,hyperman,feersum,mojo,node,go,aiohttp
 ```
+
+The default set comes from metadata returned by each target's `server.pl info` action; it is not hard-coded in `run.pl`.
 
 Twiggy is explicit-only because its current behavior does not complete this benchmark's long-lived keep-alive workload reliably. libh2o is explicit-only because it is a lower-level protocol/server reference rather than a peer application API.
 
@@ -100,17 +100,13 @@ This is a protocol-stack comparison, not a claim that every framework performs i
 
 ### `--servers=LIST`
 
-Comma-separated server keys to run.
+Comma-separated discovered server keys to run.
 
 ```sh
 perl run.pl --servers=hyperman,feersum,node
 ```
 
-Default:
-
-```text
-linuxevent,hyperman,feersum,mojo,node,go,aiohttp
-```
+With no `--servers`, the runner selects every discovered target whose `server.pl info` metadata has `default` enabled.
 
 Unavailable targets are skipped unless `--strict` is used.
 
@@ -192,7 +188,7 @@ Makes any requested unavailable server a fatal error. Use this for CI or publish
 
 ### `--json=PATH`
 
-Writes a machine-readable report containing the benchmark contract version, environment/runtime versions when detectable, complete configuration, skipped targets, every repeat, and median summary values.
+Writes a machine-readable report containing the benchmark contract version, environment/runtime versions when detectable, complete configuration, per-target launcher metadata/settings, skipped targets, every repeat, and median summary values.
 
 Keep the JSON report with published results.
 
@@ -214,7 +210,7 @@ Use smoke mode to verify setup and keep-alive behavior. Do not publish smoke thr
 
 ### `--help`
 
-Prints the option summary.
+Prints the option summary and the server keys discovered from `servers/*/server.pl`.
 
 ## More examples
 
@@ -267,27 +263,58 @@ README.md
 run.pl
 servers/
     aiohttp/
+        README.md
+        server.pl
+        aiohttp-http.py
     feersum/
+        README.md
+        server.pl
+        feersum-http.pl
     go/
+        README.md
+        server.pl
+        go-http.go
     h2o/
+        README.md
+        server.pl
+        libh2o-http.c
     hyperman/
+        README.md
+        server.pl
+        hyperman-http.pl
     linuxevent/
+        README.md
+        server.pl
+        linuxevent-http.pl
     mojo/
+        README.md
+        server.pl
+        mojo-http.pl
     node/
+        README.md
+        server.pl
+        node-http.js
     twiggy/
+        README.md
+        server.pl
+        twiggy-http.pl
 ```
 
-Each server directory contains the adapter source and its README.
+Each server directory owns its adapter source, setup documentation, dependency detection, build preparation, runtime configuration, and cleanup.
 
 ## Continuous integration
 
 Repository CI uses small correctness workloads, including a required smoke comparison that does not select Linux::Event. Optional adapter CI may install benchmark targets temporarily to exercise their adapters; those installations are test fixtures, not Benchmark::Web dependencies.
+
+CI also copies a conforming server directory to a brand-new key and runs it without changing `run.pl`. That protects the filesystem plug-in contract from accidentally becoming hard-coded later.
 
 CI throughput is not a publishable performance result.
 
 ## Interpreting results
 
 The runner reports requests per second plus p50, p95, p99, and maximum client-visible latency. The final table uses the median value across repeats for each metric.
+
+The screenshot-oriented terminal summary includes the common workload settings plus the short `settings` string reported by each selected target launcher. Server-specific configuration therefore stays owned by the server folder while remaining visible in shared results.
 
 Loopback throughput is useful for comparing CPU/protocol-stack cost, but it is not internet request capacity. Real network latency and bandwidth are deliberately absent, and client plus server compete for resources on one machine.
 
@@ -306,16 +333,18 @@ GitHub-hosted runner throughput is useful for regression direction and correctne
 
 ## Server launcher contract
 
-Every directory directly under `servers/` that participates in the matrix must contain a Perl launcher named `server.pl`. The directory name is the runner key. `run.pl` invokes every target through the same actions:
+Every immediate subdirectory of `servers/` that contains `server.pl` is a benchmark target. The directory name is its runner key.
+
+`run.pl` invokes every target through the same interface:
 
 ```text
-perl servers/<key>/server.pl info
-perl servers/<key>/server.pl probe
-perl servers/<key>/server.pl prepare
-perl servers/<key>/server.pl version
-perl servers/<key>/server.pl settings
-perl servers/<key>/server.pl run
-perl servers/<key>/server.pl cleanup
+server.pl info
+server.pl probe
+server.pl prepare
+server.pl version
+server.pl settings
+server.pl run
+server.pl cleanup
 ```
 
 The actions mean:
@@ -330,7 +359,9 @@ The actions mean:
 
 `run.pl` supplies the benchmark workload inputs uniformly through `BENCH_PORT`, `BENCH_RESPONSE_BYTES`, and `BENCH_REQUEST_BODY_BYTES` when it invokes `run`. Those are part of the benchmark launcher contract. Any additional environment variables, runtime flags, build commands, source-checkout discovery, or other setup required by a particular implementation belongs inside that implementation's `server.pl`, not in `run.pl`.
 
-A contributor may use any files they need inside their own server directory. Only `server.pl` and the benchmark protocol contract are visible to the central runner.
+`prepare` and `run` are separate launcher invocations, so environment changes made by `prepare` do not carry into the server process. If a target requires runtime environment variables, its `run` action must set them itself before launching the implementation.
+
+A contributor may use any files they need inside their own server directory. Only `server.pl` and the benchmark protocol contract are visible to the central runner. A conforming new directory becomes selectable with `--servers=<key>` without a registration edit to `run.pl`.
 
 ## Adapter contract
 
