@@ -10,21 +10,20 @@ permissions:
 
 jobs:
   apply:
-    if: github.event.head_commit.message == 'Fix screenshot summary staging workflow'
+    if: github.event.head_commit.message == 'Apply screenshot summary runner patch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: feature/screenshot-summary
 
-      - name: Apply and commit changes
+      - name: Apply and commit runner change
         shell: bash
         run: |
           python3 .github/apply-screenshot-summary.py
           rm .github/apply-screenshot-summary.py
-          rm .github/workflows/apply-screenshot-summary.yml
           git config user.name 'Benchmark::Web CI'
           git config user.email 'actions@users.noreply.github.com'
-          git add -A
+          git add benchmarks/http/run.pl .github/apply-screenshot-summary.py
           git commit -m 'Improve screenshot-friendly terminal summary'
           git push origin HEAD:feature/screenshot-summary
