@@ -1,123 +1,69 @@
 # HTTP server comparison
 
-This directory contains the standalone HTTP/1.1 comparison benchmark for Benchmark::Web.
+This directory contains the standalone HTTP/1.1 cross-server benchmark for Benchmark::Web.
 
-You can point users directly at this folder. It contains the runner, every server adapter, and the full benchmark contract.
-
-**No server is required to use the benchmark.** Missing competitors are skipped unless `--strict` is requested.
-
-In particular, Linux::Event::Net::HTTP and Hyperman are optional benchmark targets, not dependencies of Benchmark::Web.
-
-## Current server keys
-
-| key | server | requirement |
-| --- | --- | --- |
-| `linuxevent` | Linux::Event::Net::HTTP | installed modules or `BENCH_LINUXEVENT_ROOT` |
-| `hyperman` | Hyperman | Perl module `Hyperman` |
-| `feersum` | Feersum | Perl module `Feersum` |
-| `mojo` | Mojolicious | Perl module `Mojolicious` |
-| `twiggy` | Twiggy/AnyEvent | Perl module `Twiggy`; explicit-only |
-| `node` | Node.js built-in `http` | `node` executable |
-| `go` | Go `net/http` | Go toolchain |
-| `aiohttp` | Python aiohttp | Python 3 plus `aiohttp` |
-| `h2o` | libh2o evloop | compiler, `pkg-config`, `libh2o-evloop`; explicit-only |
-
-Default set:
-
-```text
-linuxevent,hyperman,feersum,mojo,node,go,aiohttp
-```
-
-Any unavailable member is reported as `skipped=` and the remaining servers still run.
-
-Twiggy is explicit-only because current Twiggy closes the long-lived keep-alive connections used by this workload before the requested phase completes. libh2o is explicit-only because it is a lower-level reference implementation rather than a peer application API.
+No server is a dependency of Benchmark::Web. The runner discovers targets from `servers/*/server.pl`, skips unavailable targets by default, and only requires every requested target when `--strict` is used.
 
 ## Quick start
 
-From this directory:
+From `benchmarks/http/`:
 
 ```sh
 perl run.pl --smoke
 ```
 
-Hyperman only:
+Run a selected comparison:
 
 ```sh
 perl run.pl \
-  --servers=hyperman \
+  --servers=hyperman,feersum,mojo,node,go,aiohttp \
   --requests=50000 \
   --warmup=5000 \
   --connections=100 \
   --repeats=5
 ```
 
-Perl servers without Linux::Event:
+Require every selected target to be available:
+
+```sh
+perl run.pl --servers=hyperman,feersum,node --smoke --strict
+```
+
+Write a machine-readable report:
 
 ```sh
 perl run.pl \
-  --servers=hyperman,feersum,mojo \
-  --requests=50000 \
-  --warmup=5000 \
-  --connections=100 \
-  --repeats=5
+  --servers=hyperman,feersum,mojo,node \
+  --requests=100000 \
+  --repeats=7 \
+  --json=results/http-comparison.json
 ```
 
-All installed default competitors:
+## Server runners
 
-```sh
-perl run.pl
+Each target lives in its own directory. Its README owns installation instructions, setup details, adapter-specific settings, and a one-target smoke-test command.
+
+| key | server | selection | setup and adapter notes |
+| --- | --- | --- | --- |
+| `linuxevent` | Linux::Event::Net::HTTP | default | [servers/linuxevent/README.md](servers/linuxevent/README.md) |
+| `hyperman` | Hyperman | default | [servers/hyperman/README.md](servers/hyperman/README.md) |
+| `feersum` | Feersum | default | [servers/feersum/README.md](servers/feersum/README.md) |
+| `mojo` | Mojolicious | default | [servers/mojo/README.md](servers/mojo/README.md) |
+| `node` | Node.js built-in `http` | default | [servers/node/README.md](servers/node/README.md) |
+| `go` | Go `net/http` | default | [servers/go/README.md](servers/go/README.md) |
+| `aiohttp` | Python aiohttp | default | [servers/aiohttp/README.md](servers/aiohttp/README.md) |
+| `twiggy` | Twiggy/AnyEvent | explicit-only | [servers/twiggy/README.md](servers/twiggy/README.md) |
+| `h2o` | libh2o evloop | explicit-only | [servers/h2o/README.md](servers/h2o/README.md) |
+
+Default target set:
+
+```text
+linuxevent,hyperman,feersum,mojo,node,go,aiohttp
 ```
 
-## Optional competitor installation
+The default set comes from metadata returned by each target's `server.pl info` action; it is not hard-coded in `run.pl`.
 
-Perl competitors:
-
-```sh
-cpanm Hyperman Feersum Mojolicious
-```
-
-Twiggy, only when explicitly selected:
-
-```sh
-cpanm Twiggy
-```
-
-Python aiohttp in an isolated environment:
-
-```sh
-python3 -m venv .venv
-.venv/bin/pip install aiohttp
-PATH="$PWD/.venv/bin:$PATH" perl run.pl --servers=aiohttp --smoke
-```
-
-Node.js and Go are detected from `PATH`.
-
-On Debian/Ubuntu, optional libh2o reference support can typically be enabled with:
-
-```sh
-sudo apt-get install build-essential pkg-config libh2o-evloop-dev
-perl run.pl --servers=h2o --smoke
-```
-
-These commands install benchmark targets for the person running the benchmark. They are not Benchmark::Web package dependencies.
-
-## Linux::Event source checkout
-
-An installed Linux::Event::Net::HTTP is detected through the normal Perl module path.
-
-To benchmark an uninstalled development checkout, build it normally and point the runner to it:
-
-```sh
-cd /path/to/perl-Linux-Event-Net-HTTP
-perl Makefile.PL
-make
-
-cd /path/to/perl-Benchmark-Web/benchmarks/http
-BENCH_LINUXEVENT_ROOT=/path/to/perl-Linux-Event-Net-HTTP \
-  perl run.pl --servers=linuxevent,hyperman,feersum --smoke
-```
-
-If Linux::Event is neither installed nor supplied with `BENCH_LINUXEVENT_ROOT`, it is skipped unless `--strict` is used.
+Twiggy is explicit-only because its current behavior does not complete this benchmark's long-lived keep-alive workload reliably. libh2o is explicit-only because it is a lower-level protocol/server reference rather than a peer application API.
 
 ## Workload contract
 
@@ -148,25 +94,21 @@ Each repeat:
 
 The primary comparison is a **single-process, single-application-execution-slot** benchmark. It is not a worker-scaling benchmark.
 
-Hyperman runs with `workers => 1`, which its documented API defines as in-process mode without the prefork supervisor. Compression is disabled explicitly. Go uses `GOMAXPROCS=1`. Other adapters likewise use one server process and their normal single-loop/single-slot mode.
+This is a protocol-stack comparison, not a claim that every framework performs identical application-layer work. Each adapter uses the smallest normal public API that receives the request and returns the same response shape. Server-specific choices are documented beside each adapter.
 
-This is a protocol-stack comparison, not a claim that every framework performs identical application-layer work. Each adapter uses the smallest normal public API that receives the request and returns the same response shape.
-
-## Settings
+## Runner settings
 
 ### `--servers=LIST`
 
-Comma-separated server keys to run.
+Comma-separated discovered server keys to run.
 
 ```sh
 perl run.pl --servers=hyperman,feersum,node
 ```
 
-Default:
+With no `--servers`, the runner selects every discovered target whose `server.pl info` metadata has `default` enabled.
 
-```text
-linuxevent,hyperman,feersum,mojo,node,go,aiohttp
-```
+Unavailable targets are skipped unless `--strict` is used.
 
 ### `--requests=N`
 
@@ -240,40 +182,19 @@ A timeout is a failed benchmark case, not a throughput result.
 
 ### `--strict`
 
-By default unavailable competitors are skipped.
-
-`--strict` makes any requested unavailable server a fatal error. This is useful for CI or published runs where silently omitting a target would invalidate the intended comparison.
-
-```sh
-perl run.pl --servers=hyperman,feersum,mojo --strict
-```
+Makes any requested unavailable server a fatal error. Use this for CI or published runs where silently omitting a target would invalidate the intended comparison.
 
 `--no-strict` explicitly restores the default skip behavior.
 
 ### `--json=PATH`
 
-Writes a machine-readable report containing:
-
-- benchmark contract version;
-- OS, kernel, architecture, and runtime/framework versions when detectable;
-- complete benchmark configuration;
-- available and skipped servers;
-- every repeat;
-- median summary values.
-
-```sh
-perl run.pl \
-  --servers=hyperman,feersum,mojo,node \
-  --requests=100000 \
-  --repeats=7 \
-  --json=results/http-comparison.json
-```
+Writes a machine-readable report containing the benchmark contract version, environment/runtime versions when detectable, complete configuration, per-target launcher metadata/settings, skipped targets, every repeat, and median summary values.
 
 Keep the JSON report with published results.
 
 ### `--smoke`
 
-Tiny correctness workload:
+Runs a tiny correctness workload:
 
 ```text
 requests:        500
@@ -289,7 +210,7 @@ Use smoke mode to verify setup and keep-alive behavior. Do not publish smoke thr
 
 ### `--help`
 
-Prints the option summary.
+Prints the option summary and the server keys discovered from `servers/*/server.pl`.
 
 ## More examples
 
@@ -324,12 +245,6 @@ perl run.pl \
   --requests=50000
 ```
 
-Explicitly omit Linux::Event:
-
-```sh
-perl run.pl --servers=hyperman,feersum,mojo,node,go,aiohttp
-```
-
 Optional low-level reference:
 
 ```sh
@@ -341,64 +256,65 @@ perl run.pl \
   --repeats=5
 ```
 
-## Linux::Event development modes
-
-The Linux::Event adapter recognizes `BENCH_LINUXEVENT_MODE`:
-
-```text
-natural       ordinary on_request -> Response->end
-request-end   response completed from on_request_end
-fast-final    on_request_final default-final path
-```
-
-Example:
-
-```sh
-BENCH_LINUXEVENT_MODE=fast-final \
-BENCH_LINUXEVENT_ROOT=/path/to/perl-Linux-Event-Net-HTTP \
-  perl run.pl --servers=linuxevent,hyperman,feersum
-```
-
-This variable changes only the Linux::Event adapter. Do not mix different Linux::Event modes into one published result without labeling them separately.
-
-For body-bearing benchmark requests, the `natural` adapter defers its response until `on_request_end` so the request body is fully consumed before responding. The bodyless default still measures the ordinary early `on_request -> Response->end` path.
-
-## Files in this folder
+## Directory layout
 
 ```text
 README.md
 run.pl
 servers/
-    aiohttp-http.py
-    feersum-http.pl
-    go-http.go
-    hyperman-http.pl
-    libh2o-http.c
-    linuxevent-http.pl
-    mojo-http.pl
-    node-http.js
-    twiggy-http.pl
+    aiohttp/
+        README.md
+        server.pl
+        aiohttp-http.py
+    feersum/
+        README.md
+        server.pl
+        feersum-http.pl
+    go/
+        README.md
+        server.pl
+        go-http.go
+    h2o/
+        README.md
+        server.pl
+        libh2o-http.c
+    hyperman/
+        README.md
+        server.pl
+        hyperman-http.pl
+    linuxevent/
+        README.md
+        server.pl
+        linuxevent-http.pl
+    mojo/
+        README.md
+        server.pl
+        mojo-http.pl
+    node/
+        README.md
+        server.pl
+        node-http.js
+    twiggy/
+        README.md
+        server.pl
+        twiggy-http.pl
 ```
 
-Nothing outside this directory is required unless you explicitly select an optional target that is not already installed. An uninstalled Linux::Event::Net::HTTP checkout is supplied explicitly with `BENCH_LINUXEVENT_ROOT`.
+Each server directory owns its adapter source, setup documentation, dependency detection, build preparation, runtime configuration, and cleanup.
 
 ## Continuous integration
 
-Repository CI uses small correctness workloads, including a required smoke comparison that does not select Linux::Event. Optional Perl-adapter CI may install benchmark targets temporarily to exercise their adapters; those installations are test fixtures, not Benchmark::Web dependencies.
+Repository CI uses small correctness workloads, including a required smoke comparison that does not select Linux::Event. Optional adapter CI may install benchmark targets temporarily to exercise their adapters; those installations are test fixtures, not Benchmark::Web dependencies.
+
+CI also copies a conforming server directory to a brand-new key and runs it without changing `run.pl`. That protects the filesystem plug-in contract from accidentally becoming hard-coded later.
 
 CI throughput is not a publishable performance result.
 
 ## Interpreting results
 
-The runner reports:
+The runner reports requests per second plus p50, p95, p99, and maximum client-visible latency. The final table uses the median value across repeats for each metric.
 
-- requests per second;
-- p50 client-visible latency;
-- p95 latency;
-- p99 latency;
-- maximum latency.
-
-The final table uses the median value across repeats for each metric.
+The screenshot-oriented terminal summary includes the common workload settings plus the short `settings` string reported by each selected target launcher. Server-specific configuration therefore stays owned by the server folder while remaining visible in shared results.
 
 Loopback throughput is useful for comparing CPU/protocol-stack cost, but it is not internet request capacity. Real network latency and bandwidth are deliberately absent, and client plus server compete for resources on one machine.
 
@@ -415,6 +331,38 @@ For public results:
 
 GitHub-hosted runner throughput is useful for regression direction and correctness, but absolute numbers can vary substantially between runner instances.
 
+## Server launcher contract
+
+Every immediate subdirectory of `servers/` that contains `server.pl` is a benchmark target. The directory name is its runner key.
+
+`run.pl` invokes every target through the same interface:
+
+```text
+server.pl info
+server.pl probe
+server.pl prepare
+server.pl version
+server.pl settings
+server.pl run
+server.pl cleanup
+```
+
+The actions mean:
+
+- `info` prints one JSON object with at least `label`; `default` selects whether the target joins the default matrix, and `order` controls stable display order.
+- `probe` exits zero when the target can be used on this machine and nonzero otherwise.
+- `prepare` performs target-specific setup such as compiling a temporary helper binary. It exits zero on success.
+- `version` prints the target/runtime version used for the JSON report.
+- `settings` prints a short human-readable summary of fairness-relevant target setup. It is included in the terminal summary and JSON report.
+- `run` starts the server and does not return until the benchmark terminates it.
+- `cleanup` removes temporary target-specific build artifacts and should succeed when there is nothing to remove.
+
+`run.pl` supplies the benchmark workload inputs uniformly through `BENCH_PORT`, `BENCH_RESPONSE_BYTES`, and `BENCH_REQUEST_BODY_BYTES` when it invokes `run`. Those are part of the benchmark launcher contract. Any additional environment variables, runtime flags, build commands, source-checkout discovery, or other setup required by a particular implementation belongs inside that implementation's `server.pl`, not in `run.pl`.
+
+`prepare` and `run` are separate launcher invocations, so environment changes made by `prepare` do not carry into the server process. If a target requires runtime environment variables, its `run` action must set them itself before launching the implementation.
+
+A contributor may use any files they need inside their own server directory. Only `server.pl` and the benchmark protocol contract are visible to the central runner. A conforming new directory becomes selectable with `--servers=<key>` without a registration edit to `run.pl`.
+
 ## Adapter contract
 
 Contributions from server authors are welcome.
@@ -429,4 +377,4 @@ A primary-comparison adapter should:
 6. disable access logging, compression, TLS, and unrelated middleware;
 7. use the smallest normal public API of the server being measured.
 
-If a server cannot satisfy one of those constraints, document the difference rather than hiding it.
+If a server cannot satisfy one of those constraints, document the difference in that server's README rather than hiding it.

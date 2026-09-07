@@ -3,7 +3,6 @@ use v5.36;
 use strict;
 use warnings;
 
-use Cwd qw(abs_path);
 use Errno qw(EINTR);
 use File::Basename qw(dirname);
 use File::Path qw(make_path);
@@ -17,87 +16,11 @@ use Time::HiRes qw(time sleep);
 
 $SIG{PIPE} = 'IGNORE';
 
-my $go_binary = "/tmp/benchmark-web-go-$$";
-my $h2o_binary = "/tmp/benchmark-web-libh2o-$$";
-END {
-    unlink $go_binary if -e $go_binary;
-    unlink $h2o_binary if -e $h2o_binary;
-}
+my %server = discover_servers();
+my @prepared;
+END { cleanup_servers(); }
 
-my @linuxevent_command;
-my @linuxevent_perl_prefix;
-
-my %server = (
-    linuxevent => {
-        label => 'Linux::Event::Net::HTTP',
-        command => \@linuxevent_command,
-        available => \&configure_linuxevent,
-    },
-    hyperman => {
-        label => 'Hyperman',
-        command => [$^X, "$Bin/servers/hyperman-http.pl"],
-        available => sub { command_ok($^X, '-MHyperman', '-e', '1') },
-    },
-    feersum => {
-        label => 'Feersum',
-        command => [$^X, "$Bin/servers/feersum-http.pl"],
-        available => sub { command_ok($^X, '-MFeersum', '-e', '1') },
-    },
-    mojo => {
-        label => 'Mojolicious',
-        command => [$^X, "$Bin/servers/mojo-http.pl"],
-        available => sub { command_ok($^X, '-MMojolicious', '-e', '1') },
-    },
-    twiggy => {
-        label => 'Twiggy/AnyEvent',
-        command => [$^X, "$Bin/servers/twiggy-http.pl"],
-        available => sub { command_ok($^X, '-MTwiggy', '-e', '1') },
-    },
-    node => {
-        label => 'Node.js http',
-        command => ['node', "$Bin/servers/node-http.js"],
-        available => sub { command_ok('node', '--version') },
-    },
-    go => {
-        label => 'Go net/http',
-        command => [$go_binary],
-        available => sub { command_ok('go', 'version') },
-        prepare => sub {
-            system 'go', 'build', '-o', $go_binary, "$Bin/servers/go-http.go";
-            die "failed to build Go benchmark server\n" if $? != 0;
-        },
-    },
-    h2o => {
-        label => 'libh2o evloop',
-        command => [$h2o_binary],
-        available => sub {
-            command_ok('cc', '--version')
-                && command_ok('pkg-config', '--exists', 'libh2o-evloop');
-        },
-        prepare => sub {
-            my $flags = capture(
-                'pkg-config', '--cflags', '--libs', 'libh2o-evloop',
-            );
-            die "failed to query libh2o-evloop build flags\n"
-                if !defined $flags;
-            my @flags = grep { length } split /\s+/, $flags;
-            system 'cc', '-O2', '-o', $h2o_binary,
-                "$Bin/servers/libh2o-http.c", @flags;
-            die "failed to build libh2o benchmark server\n" if $? != 0;
-        },
-    },
-    aiohttp => {
-        label => 'Python aiohttp',
-        command => ['python3', "$Bin/servers/aiohttp-http.py"],
-        available => sub { command_ok('python3', '-c', 'import aiohttp') },
-    },
-);
-
-# Missing competitors are skipped by default. Twiggy remains explicit-only
-# because current Twiggy closes this benchmark's long-lived connections before
-# the requested keep-alive workload completes. libh2o is explicit-only because
-# it is a low-level reference implementation rather than a peer application API.
-my @servers = qw(linuxevent hyperman feersum mojo node go aiohttp);
+my @servers = default_servers();
 my $requests = 20_000;
 my $warmup = 2_000;
 my $connections = 100;
@@ -150,21 +73,34 @@ die "at least one server is required\n" if !@servers;
 die "unknown server: $_\n" for grep { !exists $server{$_} } @servers;
 
 my (@available, @skipped);
+my %skip_reason;
 for my $name (@servers) {
-    if ($server{$name}{available}->()) {
-        push @available, $name;
-    } else {
+    if (!launcher_ok($name, 'probe')) {
         push @skipped, $name;
+        $skip_reason{$name} = 'probe failed';
+        next;
     }
+    if (!launcher_ok($name, 'prepare')) {
+        push @skipped, $name;
+        $skip_reason{$name} = 'prepare failed';
+        next;
+    }
+    push @prepared, $name;
+    push @available, $name;
 }
 if (@skipped && $strict) {
-    die "unavailable benchmark servers: " . join(', ', @skipped) . "\n";
+    die "unavailable benchmark servers: "
+        . join(', ', map { "$_ ($skip_reason{$_})" } @skipped)
+        . "\n";
 }
 die "no requested benchmark servers are available\n" if !@available;
 
-for my $name (@available) {
-    $server{$name}{prepare}->() if $server{$name}{prepare};
-}
+my %server_version = map {
+    $_ => launcher_capture($_, 'version')
+} @available;
+my %server_settings = map {
+    $_ => (launcher_capture($_, 'settings') // '')
+} @available;
 
 my $request_wire = make_request($request_body_bytes);
 my @records;
@@ -210,16 +146,15 @@ if (defined $json_path) {
         generated_at => strftime('%Y-%m-%dT%H:%M:%SZ', gmtime),
         environment => {
             perl => "$^V",
-            linux_event_net_http => capture_linuxevent_version(),
-            hyperman => capture($^X, '-MHyperman', '-e', 'print $Hyperman::VERSION'),
-            feersum => capture($^X, '-MFeersum', '-e', 'print $Feersum::VERSION'),
-            mojolicious => capture($^X, '-MMojolicious', '-e', 'print $Mojolicious::VERSION'),
-            twiggy => capture($^X, '-MTwiggy', '-e', 'print $Twiggy::VERSION'),
-            node => capture('node', '--version'),
-            go => capture('go', 'version'),
-            libh2o_evloop => capture('pkg-config', '--modversion', 'libh2o-evloop'),
-            python => capture('python3', '--version'),
-            aiohttp => capture('python3', '-c', 'import aiohttp; print(aiohttp.__version__)'),
+            servers => {
+                map {
+                    $_ => {
+                        label => $server{$_}{label},
+                        version => $server_version{$_},
+                        settings => $server_settings{$_},
+                    }
+                } @available
+            },
             os => $sysname,
             kernel => $release,
             machine => $machine,
@@ -227,6 +162,7 @@ if (defined $json_path) {
         configuration => {
             servers => \@available,
             skipped => \@skipped,
+            skipped_reasons => \%skip_reason,
             requests => $requests,
             warmup => $warmup,
             connections => $connections,
@@ -256,7 +192,11 @@ sub print_terminal_summary ($summary) {
         ? 'strict - every requested target required'
         : 'missing targets are skipped';
     my $server_labels = join(', ', map { $server{$_}{label} } @available);
-    my $skipped_labels = join(', ', map { $server{$_}{label} } @skipped);
+    my $skipped_labels = join(', ', map {
+        my $label = $server{$_}{label};
+        my $reason = $skip_reason{$_};
+        defined($reason) && length($reason) ? "$label [$reason]" : $label;
+    } @skipped);
     my $result_note = $repeats == 1
         ? 'single measured run; latency is client-visible'
         : "median of $repeats repeats; latency is client-visible";
@@ -283,9 +223,11 @@ sub print_terminal_summary ($summary) {
     printf "  %-25s %s\n", 'Client:', 'shared raw Perl client';
     printf "  %-25s %s\n", 'Server policy:',
         'one process; one application execution slot';
-    if (grep { $_ eq 'linuxevent' } @available) {
-        printf "  %-25s %s\n", 'Linux::Event mode:',
-            ($ENV{BENCH_LINUXEVENT_MODE} // 'natural');
+    for my $name (@available) {
+        my $settings = $server_settings{$name};
+        next if !defined($settings) || $settings eq '';
+        printf "  %-25s %s: %s\n", 'Target setup:',
+            $server{$name}{label}, $settings;
     }
     printf "  %-25s %s\n", 'JSON report:', $json_path
         if defined $json_path;
@@ -307,51 +249,64 @@ sub print_terminal_summary ($summary) {
     return;
 }
 
-sub configure_linuxevent () {
-    my @check_modules = (
-        '-MLinux::Event::Loop',
-        '-MLinux::Event::Net::HTTP::Connection',
-        '-MLinux::Event::Net::HTTP::Server',
-        '-e',
-        '1',
-    );
+sub discover_servers () {
+    my $root = "$Bin/servers";
+    opendir my $dh, $root or die "open benchmark server directory $root: $!\n";
+    my %found;
 
-    if (defined(my $root = $ENV{BENCH_LINUXEVENT_ROOT})) {
-        $root = abs_path($root);
-        if (defined $root) {
-            my $lib = "$root/blib/lib";
-            my $arch = "$root/blib/arch";
-            if (-f "$lib/Linux/Event/Net/HTTP.pm" && -d $arch
-                && command_ok($^X, "-I$lib", "-I$arch", @check_modules)) {
-                @linuxevent_perl_prefix = ($^X, "-I$lib", "-I$arch");
-                @linuxevent_command = (
-                    @linuxevent_perl_prefix,
-                    "$Bin/servers/linuxevent-http.pl",
-                );
-                return 1;
-            }
-        }
+    for my $key (sort readdir $dh) {
+        next if $key =~ /\A\./;
+        my $dir = "$root/$key";
+        next if !-d $dir;
+        my $launcher = "$dir/server.pl";
+        next if !-f $launcher;
+        die "invalid benchmark server key '$key'\n"
+            if $key !~ /\A[a-z0-9][a-z0-9_-]*\z/;
+
+        my $raw = capture($^X, $launcher, 'info');
+        die "benchmark server $key: server.pl info failed\n"
+            if !defined $raw;
+        my $info = eval { JSON::PP->new->decode($raw) };
+        die "benchmark server $key: server.pl info did not return a JSON object\n"
+            if !$info || ref($info) ne 'HASH';
+        die "benchmark server $key: info.label is required\n"
+            if !defined($info->{label}) || ref($info->{label}) || $info->{label} eq '';
+
+        my $order = defined($info->{order}) ? 0 + $info->{order} : 1000;
+        $found{$key} = {
+            label => "$info->{label}",
+            default => $info->{default} ? 1 : 0,
+            order => $order,
+            launcher => $launcher,
+        };
     }
+    closedir $dh;
 
-    if (command_ok($^X, @check_modules)) {
-        @linuxevent_perl_prefix = ($^X);
-        @linuxevent_command = ($^X, "$Bin/servers/linuxevent-http.pl");
-        return 1;
-    }
-
-    @linuxevent_perl_prefix = ();
-    @linuxevent_command = ();
-    return 0;
+    die "no HTTP benchmark server adapters found under $root\n" if !%found;
+    return %found;
 }
 
-sub capture_linuxevent_version () {
-    return undef if !@linuxevent_perl_prefix;
-    return capture(
-        @linuxevent_perl_prefix,
-        '-MLinux::Event::Net::HTTP',
-        '-e',
-        'print $Linux::Event::Net::HTTP::VERSION',
-    );
+sub default_servers () {
+    my @default = grep { $server{$_}{default} } keys %server;
+    die "no default HTTP benchmark servers are configured\n" if !@default;
+    return sort {
+        $server{$a}{order} <=> $server{$b}{order} || $a cmp $b
+    } @default;
+}
+
+sub launcher_ok ($name, $action) {
+    return command_ok($^X, $server{$name}{launcher}, $action);
+}
+
+sub launcher_capture ($name, $action) {
+    return capture($^X, $server{$name}{launcher}, $action);
+}
+
+sub cleanup_servers () {
+    for my $name (reverse @prepared) {
+        command_ok($^X, $server{$name}{launcher}, 'cleanup');
+    }
+    return;
 }
 
 sub run_case ($name, $wire) {
@@ -410,7 +365,7 @@ sub start_server ($name, $port) {
         $ENV{BENCH_REQUEST_BODY_BYTES} = $request_body_bytes;
         open STDOUT, '>', $stdout_path or POSIX::_exit(126);
         open STDERR, '>', $stderr_path or POSIX::_exit(126);
-        child_exec(@{$server{$name}{command}});
+        child_exec($^X, $server{$name}{launcher}, 'run');
         POSIX::_exit(127);
     }
     return ($pid, $stdout_path, $stderr_path);
@@ -678,10 +633,18 @@ sub capture (@command) {
 }
 
 sub usage ($status) {
-    print <<'USAGE';
+    my @all = sort {
+        $server{$a}{order} <=> $server{$b}{order} || $a cmp $b
+    } keys %server;
+    my @default = default_servers();
+    my $all = join(',', @all);
+    my $default = join(',', @default);
+
+    print <<USAGE;
 usage: run.pl [options]
 
-  --servers=LIST           linuxevent,hyperman,feersum,mojo,twiggy,node,go,h2o,aiohttp
+  --servers=LIST           discovered server keys (available: $all)
+                           default: $default
   --requests=N             measured requests per server/repeat (default 20000)
   --warmup=N               warmup requests per server/repeat (default 2000)
   --connections=N          concurrent TCP connections (default 100)

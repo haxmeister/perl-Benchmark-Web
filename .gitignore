@@ -1,0 +1,4 @@
+benchmarks/http/servers/aiohttp/.venv/
+benchmarks/http/servers/linuxevent/source-root
+**/__pycache__/
+*.pyc
