@@ -40,7 +40,8 @@ if ($action eq 'version') {
     exit 127;
 }
 if ($action eq 'settings') {
-    print 'library=libh2o-evloop, process=1, explicit-only';
+    my $source = -d "$Bin/.local" ? 'target-local' : 'system';
+    print "library=libh2o-evloop, source=$source, process=1, explicit-only";
     exit 0;
 }
 if ($action eq 'run') {
@@ -52,6 +53,10 @@ die "usage: server.pl info|probe|prepare|version|settings|run|cleanup\n";
 
 sub configure_pkg_config_path () {
     my @candidate = (
+        "$Bin/.local/lib/pkgconfig",
+        "$Bin/.local/lib64/pkgconfig",
+        "$Bin/.local/share/pkgconfig",
+        glob("$Bin/.local/lib/*/pkgconfig"),
         '/usr/local/lib/pkgconfig',
         '/usr/local/lib64/pkgconfig',
         '/usr/local/share/pkgconfig',
