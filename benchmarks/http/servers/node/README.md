@@ -31,7 +31,8 @@ perl run.pl --servers=node --smoke --strict
 
 ## Adapter setup
 
-The runner launches one Node.js process. The adapter uses only `node:http`, consumes the incoming request stream, and sends the fixed benchmark response after the request body ends.
-\n## Launcher interface
+`server.pl` launches one Node.js process. The adapter uses only `node:http`, consumes the incoming request stream, and sends the fixed benchmark response after the request body ends.
 
-This directory is self-contained behind `server.pl`. The central HTTP runner discovers this directory automatically and uses the standard `info`, `probe`, `prepare`, `version`, `settings`, `run`, and `cleanup` actions. Target-specific setup belongs in `server.pl`; `run.pl` does not contain special cases for this server.\n
+## Launcher interface
+
+This directory is self-contained behind `server.pl`. The central HTTP runner discovers this directory automatically and uses the standard `info`, `probe`, `prepare`, `version`, `settings`, `run`, and `cleanup` actions. Target-specific setup belongs in `server.pl`; `run.pl` does not contain special cases for this server.
