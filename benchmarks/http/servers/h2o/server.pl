@@ -27,7 +27,13 @@ if ($action eq 'probe') {
 if ($action eq 'prepare') {
     my $flags = `pkg-config --cflags --libs libh2o-evloop 2>/dev/null`;
     exit 1 if $? != 0;
+    my $libdir = `pkg-config --variable=libdir libh2o-evloop 2>/dev/null`;
+    exit 1 if $? != 0;
+    chomp $libdir;
+    exit 1 if $libdir eq '';
+
     my @flags = grep { length } split /\s+/, $flags;
+    push @flags, "-Wl,-rpath,$libdir";
     system 'cc', '-O2', '-o', $binary, "$Bin/libh2o-http.c", @flags;
     exit(($? == 0) ? 0 : 1);
 }
@@ -36,11 +42,22 @@ if ($action eq 'cleanup') {
     exit 0;
 }
 if ($action eq 'version') {
+    if (-d "$Bin/.source/.git") {
+        my $sha = `git -C "$Bin/.source" rev-parse --short=12 HEAD 2>/dev/null`;
+        if ($? == 0) {
+            chomp $sha;
+            if ($sha ne '') {
+                print "upstream-$sha";
+                exit 0;
+            }
+        }
+    }
     exec 'pkg-config', '--modversion', 'libh2o-evloop';
     exit 127;
 }
 if ($action eq 'settings') {
-    print 'library=libh2o-evloop, process=1, explicit-only';
+    my $source = -d "$Bin/.local" ? 'target-local' : 'system';
+    print "library=libh2o-evloop, source=$source, process=1, explicit-only";
     exit 0;
 }
 if ($action eq 'run') {
@@ -52,6 +69,10 @@ die "usage: server.pl info|probe|prepare|version|settings|run|cleanup\n";
 
 sub configure_pkg_config_path () {
     my @candidate = (
+        "$Bin/.local/lib/pkgconfig",
+        "$Bin/.local/lib64/pkgconfig",
+        "$Bin/.local/share/pkgconfig",
+        glob("$Bin/.local/lib/*/pkgconfig"),
         '/usr/local/lib/pkgconfig',
         '/usr/local/lib64/pkgconfig',
         '/usr/local/share/pkgconfig',
