@@ -35,6 +35,12 @@ jobs:
 
           replace_once(
               'benchmarks/http/run.pl',
+              """my @prepared;\nEND { cleanup_servers(); }\n""",
+              """my @prepared;\nEND {\n    my $status = $?;\n    cleanup_servers();\n    $? = $status;\n}\n""",
+          )
+
+          replace_once(
+              'benchmarks/http/run.pl',
               """for my $name (@servers) {\n    if (!launcher_ok($name, 'probe')) {\n""",
               """for my $name (@servers) {\n    if (!$server{$name}{workload_supported}) {\n        push @skipped, $name;\n        $skip_reason{$name} = 'unsupported workload: ' . $server{$name}{workload_unsupported_reason};\n        next;\n    }\n    if (!launcher_ok($name, 'probe')) {\n""",
           )
