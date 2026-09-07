@@ -27,7 +27,13 @@ if ($action eq 'probe') {
 if ($action eq 'prepare') {
     my $flags = `pkg-config --cflags --libs libh2o-evloop 2>/dev/null`;
     exit 1 if $? != 0;
+    my $libdir = `pkg-config --variable=libdir libh2o-evloop 2>/dev/null`;
+    exit 1 if $? != 0;
+    chomp $libdir;
+    exit 1 if $libdir eq '';
+
     my @flags = grep { length } split /\s+/, $flags;
+    push @flags, "-Wl,-rpath,$libdir";
     system 'cc', '-O2', '-o', $binary, "$Bin/libh2o-http.c", @flags;
     exit(($? == 0) ? 0 : 1);
 }
@@ -36,6 +42,16 @@ if ($action eq 'cleanup') {
     exit 0;
 }
 if ($action eq 'version') {
+    if (-d "$Bin/.source/.git") {
+        my $sha = `git -C "$Bin/.source" rev-parse --short=12 HEAD 2>/dev/null`;
+        if ($? == 0) {
+            chomp $sha;
+            if ($sha ne '') {
+                print "upstream-$sha";
+                exit 0;
+            }
+        }
+    }
     exec 'pkg-config', '--modversion', 'libh2o-evloop';
     exit 127;
 }
