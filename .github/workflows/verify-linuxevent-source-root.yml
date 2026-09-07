@@ -1,0 +1,55 @@
+name: Verify LinuxEvent source-root setup
+
+on:
+  push:
+    branches:
+      - docs/fix-libh2o-install
+
+permissions:
+  contents: read
+
+jobs:
+  verify-linuxevent:
+    if: github.event.head_commit.message == 'Verify self-contained LinuxEvent source setup'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout LinuxEvent HTTP source
+        uses: actions/checkout@v4
+        with:
+          repository: haxmeister/perl-Linux-Event-Net-HTTP
+          ref: main
+          path: linuxevent-http
+
+      - name: Install build prerequisite
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cpanminus build-essential
+          sudo cpanm --notest Linux::Event
+
+      - name: Build LinuxEvent HTTP checkout
+        shell: bash
+        run: |
+          cd linuxevent-http
+          perl Makefile.PL
+          make -j2
+
+      - name: Configure target-local source checkout
+        shell: bash
+        run: |
+          printf '%s\n' "$GITHUB_WORKSPACE/linuxevent-http" > benchmarks/http/servers/linuxevent/source-root
+          test -z "${BENCH_LINUXEVENT_ROOT:-}"
+          perl benchmarks/http/servers/linuxevent/server.pl probe
+          perl benchmarks/http/servers/linuxevent/server.pl version
+          perl benchmarks/http/servers/linuxevent/server.pl settings
+
+      - name: Smoke LinuxEvent through generic runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${BENCH_LINUXEVENT_ROOT:-}"
+          perl benchmarks/http/run.pl --servers=linuxevent --smoke --strict
+          perl benchmarks/http/run.pl --servers=linuxevent --smoke --strict --request-body-bytes=4096
