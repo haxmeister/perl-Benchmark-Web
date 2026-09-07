@@ -92,12 +92,47 @@ PATH="$PWD/.venv/bin:$PATH" perl run.pl --servers=aiohttp --smoke
 
 Node.js and Go are detected from `PATH`.
 
-On Debian/Ubuntu, optional libh2o reference support can typically be enabled with:
+The `h2o` target needs the H2O library built with its native event loop and discoverable as `libh2o-evloop` through `pkg-config`. The `libh2o-evloop-dev` package is not available on every Debian-derived release, so building current upstream H2O is the reliable installation path. H2O upstream considers current `master` ready for general use and no longer publishes normal version releases.
+
+On Debian/Ubuntu/Devuan systems, install the build prerequisites first:
 
 ```sh
-sudo apt-get install build-essential pkg-config libh2o-evloop-dev
-perl run.pl --servers=h2o --smoke
+sudo apt-get install build-essential cmake pkg-config libssl-dev zlib1g-dev git
 ```
+
+Then clone H2O with its submodules and install it:
+
+```sh
+git clone --recurse-submodules https://github.com/h2o/h2o.git
+cd h2o
+mkdir -p build
+cd build
+cmake ..
+make -j"$(nproc)"
+sudo make install
+sudo ldconfig
+```
+
+Verify that the library required by this benchmark is visible:
+
+```sh
+pkg-config --modversion libh2o-evloop
+```
+
+Then run the benchmark from `benchmarks/http/`:
+
+```sh
+perl run.pl --servers=h2o --smoke --strict
+```
+
+If H2O was installed under a custom prefix and `pkg-config` cannot find it, add that prefix's `lib/pkgconfig` directory to `PKG_CONFIG_PATH` before running the benchmark. For example, for the default `/usr/local` prefix on systems where it is not searched automatically:
+
+```sh
+export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}
+pkg-config --modversion libh2o-evloop
+```
+
+Some distributions still package `libh2o-evloop-dev`. If `apt-cache show libh2o-evloop-dev` succeeds on your release, installing that package together with `build-essential` and `pkg-config` is a valid shortcut. Do not assume the package exists merely because the system is Debian- or Ubuntu-derived.
 
 These commands install benchmark targets for the person running the benchmark. They are not Benchmark::Web package dependencies.
 
