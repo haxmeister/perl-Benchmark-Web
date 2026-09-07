@@ -27,19 +27,38 @@ Benchmark::Web does not depend on Linux::Event::Net::HTTP. It is only needed whe
 
 ## Development checkout
 
-You can benchmark an uninstalled source checkout without installing it system-wide:
+`server.pl` can benchmark a built checkout without installing it system-wide.
 
-```sh
-cd /path/to/perl-Linux-Event-Net-HTTP
-perl Makefile.PL
-make
+If `perl-Benchmark-Web` and `perl-Linux-Event-Net-HTTP` are sibling directories, the launcher finds the HTTP checkout automatically:
 
-cd /path/to/perl-Benchmark-Web/benchmarks/http
-BENCH_LINUXEVENT_ROOT=/path/to/perl-Linux-Event-Net-HTTP \
-  perl run.pl --servers=linuxevent --smoke --strict
+```text
+work/
+    perl-Benchmark-Web/
+    perl-Linux-Event-Net-HTTP/
 ```
 
-`BENCH_LINUXEVENT_ROOT` must point at a built checkout containing `blib/lib` and `blib/arch`.
+Build the HTTP checkout normally:
+
+```sh
+cd /path/to/work/perl-Linux-Event-Net-HTTP
+perl Makefile.PL
+make
+```
+
+Then run the benchmark from `perl-Benchmark-Web/benchmarks/http/` with no environment-variable setup:
+
+```sh
+perl run.pl --servers=linuxevent --smoke --strict
+```
+
+If the checkout is elsewhere, put its path in the target-local `source-root` file:
+
+```sh
+printf '%s\n' /path/to/perl-Linux-Event-Net-HTTP \
+  > servers/linuxevent/source-root
+```
+
+The launcher reads that file and adds the checkout's `blib/lib` and `blib/arch` itself.
 
 ## Run
 
@@ -51,7 +70,9 @@ perl run.pl --servers=linuxevent --smoke --strict
 
 ## Adapter modes
 
-`BENCH_LINUXEVENT_MODE` selects the response path:
+The normal matrix uses `natural` mode and `read_budget_bytes=0`; `server.pl` applies those defaults itself.
+
+For development comparisons, `BENCH_LINUXEVENT_MODE` can override the response path:
 
 ```text
 natural       ordinary on_request -> Response->end
@@ -59,18 +80,12 @@ request-end   response completed from on_request_end
 fast-final    on_request_final default-final path
 ```
 
-Example:
-
-```sh
-BENCH_LINUXEVENT_MODE=fast-final \
-  perl run.pl --servers=linuxevent --smoke --strict
-```
+`BENCH_READ_BUDGET_BYTES` can likewise override the connection class `read_budget_bytes` stream option. These are optional benchmark-development overrides, not installation/setup requirements. The selected values are reported by the generic `settings` action and therefore appear in the terminal summary and JSON output.
 
 For requests with bodies, `natural` defers the response until `on_request_end` so the body is consumed before responding.
 
-`BENCH_READ_BUDGET_BYTES` is passed through as the connection class `read_budget_bytes` stream option. It defaults to `0`.
-
 Do not mix Linux::Event modes in one published result without labeling them separately.
-\n## Launcher interface
 
-This directory is self-contained behind `server.pl`. The central HTTP runner discovers this directory automatically and uses the standard `info`, `probe`, `prepare`, `version`, `settings`, `run`, and `cleanup` actions. Target-specific setup belongs in `server.pl`; `run.pl` does not contain special cases for this server.\n
+## Launcher interface
+
+This directory is self-contained behind `server.pl`. The central HTTP runner discovers this directory automatically and uses the standard `info`, `probe`, `prepare`, `version`, `settings`, `run`, and `cleanup` actions. Target-specific setup belongs in `server.pl`; `run.pl` does not contain special cases for this server.
