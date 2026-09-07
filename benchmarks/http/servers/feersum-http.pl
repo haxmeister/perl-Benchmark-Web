@@ -30,7 +30,6 @@ $runner->run(sub ($request) {
                 if !defined($n) || $n <= 0;
             $remaining -= $n;
         }
-        $input->close;
     }
 
     $request->send_response(
