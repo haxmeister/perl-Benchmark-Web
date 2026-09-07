@@ -28,6 +28,19 @@ jobs:
           python3 -m py_compile benchmarks/http/servers/aiohttp/aiohttp-http.py
           go build -o /tmp/benchmark-web-go-syntax benchmarks/http/servers/go/go-http.go
 
+      - name: Reject missing target dependencies and build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          PATH=/nonexistent /usr/bin/perl benchmarks/http/servers/node/server.pl probe
+          node_status=$?
+          PATH=/nonexistent /usr/bin/perl benchmarks/http/servers/go/server.pl prepare
+          go_prepare_status=$?
+          set -e
+          test "$node_status" -ne 0
+          test "$go_prepare_status" -ne 0
+
       - name: Prove folder-only server discovery
         shell: bash
         run: |
@@ -93,8 +106,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cpanminus build-essential
           sudo cpanm --notest Hyperman Feersum Mojolicious
-          python3 -m venv /tmp/benchmark-web-venv
-          /tmp/benchmark-web-venv/bin/pip install aiohttp
+          python3 -m venv benchmarks/http/servers/aiohttp/.venv
+          benchmarks/http/servers/aiohttp/.venv/bin/pip install aiohttp
 
       - name: Check optional Perl adapter syntax
         shell: bash
@@ -106,18 +119,16 @@ jobs:
       - name: Smoke selected public comparison
         shell: bash
         run: |
-          PATH="/tmp/benchmark-web-venv/bin:$PATH" \
-            perl benchmarks/http/run.pl \
-              --servers=hyperman,feersum,mojo,node,go,aiohttp \
-              --smoke \
-              --strict
+          perl benchmarks/http/run.pl \
+            --servers=hyperman,feersum,mojo,node,go,aiohttp \
+            --smoke \
+            --strict
 
       - name: Exercise selected request-body contract
         shell: bash
         run: |
-          PATH="/tmp/benchmark-web-venv/bin:$PATH" \
-            perl benchmarks/http/run.pl \
-              --servers=hyperman,feersum,mojo,node,go,aiohttp \
-              --smoke \
-              --strict \
-              --request-body-bytes=4096
+          perl benchmarks/http/run.pl \
+            --servers=hyperman,feersum,mojo,node,go,aiohttp \
+            --smoke \
+            --strict \
+            --request-body-bytes=4096
