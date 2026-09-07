@@ -32,9 +32,11 @@ perl run.pl --servers=twiggy --smoke --strict
 
 ## Current benchmark status
 
-Twiggy is explicit-only because current Twiggy behavior closes the long-lived keep-alive connections used by this workload before the requested phase completes reliably. Keep that limitation attached to Twiggy-specific results rather than treating an incomplete run as comparable throughput.
+Stock Twiggy is incompatible with this benchmark's persistent HTTP/1.1 connection contract: it closes the connection after each response. The target therefore declares this workload unsupported in `server.pl info`.
 
-The adapter uses `Twiggy::Server` directly and consumes request bodies before returning the fixed PSGI response.
+A non-strict mixed matrix skips Twiggy before starting it and records the reason in the terminal summary and JSON report. Selecting Twiggy with `--strict`, or selecting only Twiggy, fails immediately with that reason instead of failing midway with `server closed connection before benchmark phase completed`.
+
+The adapter remains in the repository for documentation and for a future benchmark family whose connection lifecycle matches Twiggy.
 
 ## Launcher interface
 
