@@ -18,7 +18,11 @@ $SIG{PIPE} = 'IGNORE';
 
 my %server = discover_servers();
 my @prepared;
-END { cleanup_servers(); }
+END {
+    my $status = $?;
+    cleanup_servers();
+    $? = $status;
+}
 
 my @servers = default_servers();
 my $requests = 20_000;
@@ -75,6 +79,11 @@ die "unknown server: $_\n" for grep { !exists $server{$_} } @servers;
 my (@available, @skipped);
 my %skip_reason;
 for my $name (@servers) {
+    if (!$server{$name}{workload_supported}) {
+        push @skipped, $name;
+        $skip_reason{$name} = 'unsupported workload: ' . $server{$name}{workload_unsupported_reason};
+        next;
+    }
     if (!launcher_ok($name, 'probe')) {
         push @skipped, $name;
         $skip_reason{$name} = 'probe failed';
@@ -93,7 +102,11 @@ if (@skipped && $strict) {
         . join(', ', map { "$_ ($skip_reason{$_})" } @skipped)
         . "\n";
 }
-die "no requested benchmark servers are available\n" if !@available;
+if (!@available) {
+    die "no requested benchmark servers are available: "
+        . join(', ', map { "$_ ($skip_reason{$_})" } @skipped)
+        . "\n";
+}
 
 my %server_version = map {
     $_ => launcher_capture($_, 'version')
@@ -272,11 +285,25 @@ sub discover_servers () {
         die "benchmark server $key: info.label is required\n"
             if !defined($info->{label}) || ref($info->{label}) || $info->{label} eq '';
 
+        my $workload_supported = exists($info->{workload_supported})
+            ? ($info->{workload_supported} ? 1 : 0)
+            : 1;
+        my $workload_unsupported_reason = '';
+        if (!$workload_supported) {
+            die "benchmark server $key: info.workload_unsupported_reason is required when workload_supported is false\n"
+                if !defined($info->{workload_unsupported_reason})
+                    || ref($info->{workload_unsupported_reason})
+                    || $info->{workload_unsupported_reason} eq '';
+            $workload_unsupported_reason = "$info->{workload_unsupported_reason}";
+        }
+
         my $order = defined($info->{order}) ? 0 + $info->{order} : 1000;
         $found{$key} = {
             label => "$info->{label}",
             default => $info->{default} ? 1 : 0,
             order => $order,
+            workload_supported => $workload_supported,
+            workload_unsupported_reason => $workload_unsupported_reason,
             launcher => $launcher,
         };
     }

@@ -7,7 +7,13 @@ use JSON::PP ();
 
 my $action = shift // '';
 if ($action eq 'info') {
-    print JSON::PP->new->canonical->encode({ label => 'Twiggy/AnyEvent', default => JSON::PP::false, order => 80 });
+    print JSON::PP->new->canonical->encode({
+        label => 'Twiggy/AnyEvent',
+        default => JSON::PP::false,
+        order => 80,
+        workload_supported => JSON::PP::false,
+        workload_unsupported_reason => 'stock Twiggy closes the connection after each response; this benchmark requires persistent HTTP/1.1 connections',
+    });
     exit 0;
 }
 if ($action eq 'probe') {

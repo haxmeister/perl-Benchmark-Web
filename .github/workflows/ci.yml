@@ -56,6 +56,40 @@ jobs:
           after=$(sha256sum benchmarks/http/run.pl)
           test "$before" = "$after"
 
+      - name: Honor target workload compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          perl benchmarks/http/run.pl \
+            --servers=node,twiggy \
+            --smoke \
+            --json=/tmp/http-unsupported.json \
+            | tee /tmp/http-unsupported.out
+          grep -F 'Twiggy/AnyEvent [unsupported workload:' /tmp/http-unsupported.out
+          ! grep -F 'server closed connection before benchmark phase completed' /tmp/http-unsupported.out
+          python3 - <<'PY'
+          import json
+          with open('/tmp/http-unsupported.json') as fh:
+              report = json.load(fh)
+          assert report['configuration']['skipped'] == ['twiggy']
+          assert 'persistent HTTP/1.1' in report['configuration']['skipped_reasons']['twiggy']
+          PY
+
+          set +e
+          perl benchmarks/http/run.pl --servers=twiggy --smoke \
+            >/tmp/http-unsupported-only.out 2>&1
+          only_status=$?
+          perl benchmarks/http/run.pl --servers=node,twiggy --smoke --strict \
+            >/tmp/http-unsupported-strict.out 2>&1
+          strict_status=$?
+          set -e
+          test "$only_status" -ne 0
+          test "$strict_status" -ne 0
+          grep -F 'persistent HTTP/1.1' /tmp/http-unsupported-only.out
+          grep -F 'unsupported workload:' /tmp/http-unsupported-strict.out
+          ! grep -F 'server closed connection before benchmark phase completed' /tmp/http-unsupported-only.out
+          ! grep -F 'server closed connection before benchmark phase completed' /tmp/http-unsupported-strict.out
+
       - name: Smoke comparison without Linux::Event
         shell: bash
         run: |

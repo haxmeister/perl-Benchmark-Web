@@ -63,7 +63,7 @@ linuxevent,hyperman,feersum,mojo,node,go,aiohttp
 
 The default set comes from metadata returned by each target's `server.pl info` action; it is not hard-coded in `run.pl`.
 
-Twiggy is explicit-only because its current behavior does not complete this benchmark's long-lived keep-alive workload reliably. libh2o is explicit-only because it is a lower-level protocol/server reference rather than a peer application API.
+Twiggy is explicit-only and declares this workload unsupported because stock Twiggy closes the connection after each response, while this benchmark requires persistent HTTP/1.1 connections. libh2o is explicit-only because it is a lower-level protocol/server reference rather than a peer application API.
 
 ## Workload contract
 
@@ -349,7 +349,7 @@ server.pl cleanup
 
 The actions mean:
 
-- `info` prints one JSON object with at least `label`; `default` selects whether the target joins the default matrix, and `order` controls stable display order.
+- `info` prints one JSON object with at least `label`; `default` selects whether the target joins the default matrix, and `order` controls stable display order. A target that cannot satisfy this benchmark family's workload contract can set `workload_supported` to false and provide `workload_unsupported_reason`; the runner then skips or rejects it before `probe`, `prepare`, or `run`.
 - `probe` exits zero when the target can be used on this machine and nonzero otherwise.
 - `prepare` performs target-specific setup such as compiling a temporary helper binary. It exits zero on success.
 - `version` prints the target/runtime version used for the JSON report.
