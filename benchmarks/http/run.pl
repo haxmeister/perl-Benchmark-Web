@@ -35,27 +35,27 @@ my %server = (
     },
     hyperman => {
         label => 'Hyperman',
-        command => [$^X, "$Bin/servers/hyperman-http.pl"],
+        command => [$^X, "$Bin/servers/hyperman/hyperman-http.pl"],
         available => sub { command_ok($^X, '-MHyperman', '-e', '1') },
     },
     feersum => {
         label => 'Feersum',
-        command => [$^X, "$Bin/servers/feersum-http.pl"],
+        command => [$^X, "$Bin/servers/feersum/feersum-http.pl"],
         available => sub { command_ok($^X, '-MFeersum', '-e', '1') },
     },
     mojo => {
         label => 'Mojolicious',
-        command => [$^X, "$Bin/servers/mojo-http.pl"],
+        command => [$^X, "$Bin/servers/mojo/mojo-http.pl"],
         available => sub { command_ok($^X, '-MMojolicious', '-e', '1') },
     },
     twiggy => {
         label => 'Twiggy/AnyEvent',
-        command => [$^X, "$Bin/servers/twiggy-http.pl"],
+        command => [$^X, "$Bin/servers/twiggy/twiggy-http.pl"],
         available => sub { command_ok($^X, '-MTwiggy', '-e', '1') },
     },
     node => {
         label => 'Node.js http',
-        command => ['node', "$Bin/servers/node-http.js"],
+        command => ['node', "$Bin/servers/node/node-http.js"],
         available => sub { command_ok('node', '--version') },
     },
     go => {
@@ -63,7 +63,7 @@ my %server = (
         command => [$go_binary],
         available => sub { command_ok('go', 'version') },
         prepare => sub {
-            system 'go', 'build', '-o', $go_binary, "$Bin/servers/go-http.go";
+            system 'go', 'build', '-o', $go_binary, "$Bin/servers/go/go-http.go";
             die "failed to build Go benchmark server\n" if $? != 0;
         },
     },
@@ -82,13 +82,13 @@ my %server = (
                 if !defined $flags;
             my @flags = grep { length } split /\s+/, $flags;
             system 'cc', '-O2', '-o', $h2o_binary,
-                "$Bin/servers/libh2o-http.c", @flags;
+                "$Bin/servers/h2o/libh2o-http.c", @flags;
             die "failed to build libh2o benchmark server\n" if $? != 0;
         },
     },
     aiohttp => {
         label => 'Python aiohttp',
-        command => ['python3', "$Bin/servers/aiohttp-http.py"],
+        command => ['python3', "$Bin/servers/aiohttp/aiohttp-http.py"],
         available => sub { command_ok('python3', '-c', 'import aiohttp') },
     },
 );
@@ -326,7 +326,7 @@ sub configure_linuxevent () {
                 @linuxevent_perl_prefix = ($^X, "-I$lib", "-I$arch");
                 @linuxevent_command = (
                     @linuxevent_perl_prefix,
-                    "$Bin/servers/linuxevent-http.pl",
+                    "$Bin/servers/linuxevent/linuxevent-http.pl",
                 );
                 return 1;
             }
@@ -335,7 +335,7 @@ sub configure_linuxevent () {
 
     if (command_ok($^X, @check_modules)) {
         @linuxevent_perl_prefix = ($^X);
-        @linuxevent_command = ($^X, "$Bin/servers/linuxevent-http.pl");
+        @linuxevent_command = ($^X, "$Bin/servers/linuxevent/linuxevent-http.pl");
         return 1;
     }
 
