@@ -11,6 +11,7 @@ my $port = $ENV{BENCH_PORT} // die "BENCH_PORT is required\n";
 my $response_bytes = $ENV{BENCH_RESPONSE_BYTES} // 32;
 my $mode = $ENV{BENCH_LINUXEVENT_MODE} // 'natural';
 our $READ_BUDGET_BYTES = 0 + ($ENV{BENCH_READ_BUDGET_BYTES} // 0);
+our $REQUEST_BODY_BYTES = 0 + ($ENV{BENCH_REQUEST_BODY_BYTES} // 0);
 my $payload = 'x' x $response_bytes;
 
 {
@@ -22,6 +23,13 @@ my $payload = 'x' x $response_bytes;
     }
 
     sub on_request ($self, $request, $response) {
+        return if $main::REQUEST_BODY_BYTES > 0;
+        $response->end($self->data->{payload});
+        return;
+    }
+
+    sub on_request_end ($self, $request, $response) {
+        return if $main::REQUEST_BODY_BYTES == 0;
         $response->end($self->data->{payload});
         return;
     }

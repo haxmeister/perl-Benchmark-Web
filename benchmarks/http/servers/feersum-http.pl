@@ -18,9 +18,27 @@ my $runner = Feersum::Runner->new(
 );
 
 $runner->run(sub ($request) {
+    my $remaining = 0 + ($request->content_length // 0);
+    if ($remaining > 0) {
+        my $input = $request->input;
+        die "missing benchmark request body\n" if !defined $input;
+        while ($remaining > 0) {
+            my $want = $remaining > 65_536 ? 65_536 : $remaining;
+            my $chunk = '';
+            my $n = $input->read($chunk, $want);
+            die "short benchmark request body\n"
+                if !defined($n) || $n <= 0;
+            $remaining -= $n;
+        }
+        $input->close;
+    }
+
     $request->send_response(
         200,
-        ['Content-Type' => 'application/octet-stream'],
+        [
+            'Content-Type'   => 'application/octet-stream',
+            'Content-Length' => length($payload),
+        ],
         \$payload,
     );
     return;

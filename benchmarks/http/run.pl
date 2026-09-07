@@ -498,6 +498,8 @@ sub drive_phase ($socket, $wire, $count, $depth, $measure, $phase_timeout) {
                 die "benchmark response missing Content-Length\n"
                     if $head !~ /\r\nContent-Length:\s*(\d+)\r\n/i;
                 my $body_len = 0 + $1;
+                die "benchmark response Content-Length $body_len did not match configured response bytes $response_bytes\n"
+                    if $body_len != $response_bytes;
                 last if length($s->{buffer}) < $head_len + $body_len;
 
                 substr($s->{buffer}, 0, $head_len + $body_len, '');
