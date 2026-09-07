@@ -55,6 +55,7 @@ sub perl_prefix () {
         my @prefix = ($^X, "-I$lib", "-I$arch");
         return \@prefix if modules_ok(@prefix);
     }
+
     my @installed = ($^X);
     return \@installed if modules_ok(@installed);
     return undef;
@@ -62,10 +63,19 @@ sub perl_prefix () {
 
 sub checkout_candidates () {
     my @candidate;
-    push @candidate, $ENV{BENCH_LINUXEVENT_ROOT}
-        if defined $ENV{BENCH_LINUXEVENT_ROOT};
+
+    my $source_root = "$Bin/source-root";
+    if (-f $source_root) {
+        open my $fh, '<', $source_root or die "open $source_root: $!\n";
+        my $root = <$fh> // '';
+        close $fh;
+        chomp $root;
+        push @candidate, $root if length $root;
+    }
+
     my $repo = abs_path("$Bin/../../../..");
     push @candidate, "$repo/../perl-Linux-Event-Net-HTTP" if defined $repo;
+
     return @candidate;
 }
 
