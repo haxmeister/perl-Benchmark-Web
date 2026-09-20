@@ -18,7 +18,7 @@ workload contract, adapters, documentation, and result interpretation.
 Cross-server HTTP/1.1 throughput and client-visible latency using one shared raw
 client and the same request/response workload for every server.
 
-Current adapters include Linux::Event::Net::HTTP, Hyperman, Feersum,
+Current adapters include Linux::Event::HTTP, Hyperman, Feersum,
 Mojolicious, Node.js, Go, aiohttp, and optional reference servers.
 
 **Linux::Event is not required. Hyperman is not required. No benchmarked server

@@ -45,7 +45,7 @@ Each target lives in its own directory. Its README owns installation instruction
 
 | key | server | selection | setup and adapter notes |
 | --- | --- | --- | --- |
-| `linuxevent` | Linux::Event::Net::HTTP | default | [servers/linuxevent/README.md](servers/linuxevent/README.md) |
+| `linuxevent` | Linux::Event::HTTP | default | [servers/linuxevent/README.md](servers/linuxevent/README.md) |
 | `hyperman` | Hyperman | default | [servers/hyperman/README.md](servers/hyperman/README.md) |
 | `feersum` | Feersum | default | [servers/feersum/README.md](servers/feersum/README.md) |
 | `mojo` | Mojolicious | default | [servers/mojo/README.md](servers/mojo/README.md) |

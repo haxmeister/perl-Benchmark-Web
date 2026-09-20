@@ -10,7 +10,7 @@ my $action = shift // '';
 
 if ($action eq 'info') {
     print JSON::PP->new->canonical->encode({
-        label => 'Linux::Event::Net::HTTP',
+        label => 'Linux::Event::HTTP',
         default => JSON::PP::true,
         order => 10,
     });
@@ -25,8 +25,8 @@ if ($action eq 'prepare' || $action eq 'cleanup') {
 if ($action eq 'version') {
     my $runtime = resolve_runtime() or exit 1;
     exec @{$runtime->{prefix}},
-        '-MLinux::Event::Net::HTTP',
-        '-e', 'print $Linux::Event::Net::HTTP::VERSION';
+        '-MLinux::Event::HTTP',
+        '-e', 'print $Linux::Event::HTTP::VERSION';
     exit 127;
 }
 if ($action eq 'settings') {
@@ -39,7 +39,7 @@ if ($action eq 'settings') {
 }
 if ($action eq 'run') {
     my $runtime = resolve_runtime()
-        or die "Linux::Event::Net::HTTP is unavailable\n";
+        or die "Linux::Event::HTTP is unavailable\n";
     $ENV{BENCH_LINUXEVENT_MODE} //= 'natural';
     $ENV{BENCH_READ_BUDGET_BYTES} //= 0;
     exec @{$runtime->{prefix}}, "$Bin/linuxevent-http.pl";
@@ -57,7 +57,7 @@ sub resolve_runtime () {
         my $abs = abs_path($root) // next;
         my $lib = "$abs/blib/lib";
         my $arch = "$abs/blib/arch";
-        next if !-f "$lib/Linux/Event/Net/HTTP.pm" || !-d $arch;
+        next if !-f "$lib/Linux/Event/HTTP.pm" || !-d $arch;
 
         my @prefix = ($^X, @local_inc, "-I$lib", "-I$arch");
         return {
@@ -97,7 +97,7 @@ sub checkout_candidates () {
 
     my $repo = abs_path("$Bin/../../../..");
     push @candidate,
-        ["$repo/../perl-Linux-Event-Net-HTTP", 'sibling-checkout']
+        ["$repo/../perl-Linux-Event-HTTP", 'sibling-checkout']
         if defined $repo;
 
     return @candidate;
@@ -106,8 +106,8 @@ sub checkout_candidates () {
 sub modules_ok (@prefix) {
     system @prefix,
         '-MLinux::Event::Loop',
-        '-MLinux::Event::Net::HTTP::Connection',
-        '-MLinux::Event::Net::HTTP::Server',
+        '-MLinux::Event::HTTP::Server::Connection',
+        '-MLinux::Event::HTTP::Server',
         '-e', '1';
     return $? == 0;
 }

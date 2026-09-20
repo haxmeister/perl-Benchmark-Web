@@ -4,8 +4,8 @@ use strict;
 use warnings;
 
 use Linux::Event::Loop;
-use Linux::Event::Net::HTTP::Connection;
-use Linux::Event::Net::HTTP::Server;
+use Linux::Event::HTTP::Server::Connection;
+use Linux::Event::HTTP::Server;
 
 my $port = $ENV{BENCH_PORT} // die "BENCH_PORT is required\n";
 my $response_bytes = $ENV{BENCH_RESPONSE_BYTES} // 32;
@@ -16,75 +16,56 @@ my $payload = 'x' x $response_bytes;
 
 {
     package Benchmark::Web::HTTP::LinuxEvent::Natural;
-    use parent 'Linux::Event::Net::HTTP::Connection';
+    use parent 'Linux::Event::HTTP::Server::Connection';
 
-    sub stream_options ($class) {
+    sub stream_tuning ($class) {
         return read_budget_bytes => $main::READ_BUDGET_BYTES;
+    }
+
+    sub _respond ($self, $response) {
+        $response->header('Content-Type', 'application/octet-stream');
+        $response->body($self->data->{payload});
+        return;
     }
 
     sub on_request ($self, $request, $response) {
         return if $main::REQUEST_BODY_BYTES > 0;
-        $response->end($self->data->{payload});
+        $self->_respond($response);
         return;
     }
 
     sub on_request_end ($self, $request, $response) {
         return if $main::REQUEST_BODY_BYTES == 0;
-        $response->end($self->data->{payload});
+        $self->_respond($response);
         return;
     }
 }
 
 {
-    package Benchmark::Web::HTTP::LinuxEvent::RequestEnd;
-    use parent 'Linux::Event::Net::HTTP::Connection';
+    package Benchmark::Web::HTTP::LinuxEvent::RawNative;
+    use parent -norequire, 'Benchmark::Web::HTTP::LinuxEvent::Natural';
+    use Linux::Event::Framer ();
+    use Linux::Event::HTTP::_HTTP1 ();
 
-    sub stream_options ($class) {
-        return read_budget_bytes => $main::READ_BUDGET_BYTES;
-    }
+    Linux::Event::Framer->declare_native_consumer(
+        __PACKAGE__,
+        Linux::Event::HTTP::_HTTP1->_raw_consumer_definition,
+    );
 
-    sub on_request ($self, $request, $response) {
-        return;
-    }
-
-    sub on_request_end ($self, $request, $response) {
-        $response->end($self->data->{payload});
-        return;
-    }
-}
-
-{
-    package Benchmark::Web::HTTP::LinuxEvent::FastFinal;
-    use parent 'Linux::Event::Net::HTTP::Connection';
-
-    sub stream_options ($class) {
-        return read_budget_bytes => $main::READ_BUDGET_BYTES;
-    }
-
-    sub on_request_final ($self, $request) {
-        return $self->data->{payload};
-    }
-
-    sub on_request ($self, $request, $response) {
-        return;
-    }
-
-    sub on_request_end ($self, $request, $response) {
-        $response->end($self->data->{payload});
-        return;
+    sub can ($class, $name) {
+        return undef if $name eq 'on_data';
+        return $class->SUPER::can($name);
     }
 }
 
 my $connection_class = $mode eq 'natural'
     ? 'Benchmark::Web::HTTP::LinuxEvent::Natural'
-    : $mode eq 'request-end'
-        ? 'Benchmark::Web::HTTP::LinuxEvent::RequestEnd'
-        : $mode eq 'fast-final'
-            ? 'Benchmark::Web::HTTP::LinuxEvent::FastFinal'
-            : die "unknown BENCH_LINUXEVENT_MODE: $mode\n";
+    : $mode eq 'raw-native'
+        ? 'Benchmark::Web::HTTP::LinuxEvent::RawNative'
+        : die "unknown BENCH_LINUXEVENT_MODE: $mode\n";
 
 my $loop = Linux::Event::Loop->new;
-my $server = Linux::Event::Net::HTTP::Server->new(
+my $server = Linux::Event::HTTP::Server->new(
     loop             => $loop,
     host             => '127.0.0.1',
     port             => 0 + $port,
