@@ -140,12 +140,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cpanminus build-essential
           sudo cpanm --notest Hyperman Feersum Mojolicious
+          bash benchmarks/http/servers/linuxevent/install.sh
           python3 -m venv benchmarks/http/servers/aiohttp/.venv
           benchmarks/http/servers/aiohttp/.venv/bin/pip install aiohttp
 
       - name: Check optional Perl adapter syntax
         shell: bash
         run: |
+          perl -c benchmarks/http/servers/linuxevent/linuxevent-http.pl
           perl -c benchmarks/http/servers/hyperman/hyperman-http.pl
           perl -c benchmarks/http/servers/feersum/feersum-http.pl
           perl -c benchmarks/http/servers/mojo/mojo-http.pl
@@ -154,7 +156,7 @@ jobs:
         shell: bash
         run: |
           perl benchmarks/http/run.pl \
-            --servers=hyperman,feersum,mojo,node,go,aiohttp \
+            --servers=linuxevent,hyperman,feersum,mojo,node,go,aiohttp \
             --smoke \
             --strict
 
@@ -162,7 +164,7 @@ jobs:
         shell: bash
         run: |
           perl benchmarks/http/run.pl \
-            --servers=hyperman,feersum,mojo,node,go,aiohttp \
+            --servers=linuxevent,hyperman,feersum,mojo,node,go,aiohttp \
             --smoke \
             --strict \
             --request-body-bytes=4096
