@@ -147,7 +147,9 @@ jobs:
       - name: Check optional Perl adapter syntax
         shell: bash
         run: |
-          perl -c benchmarks/http/servers/linuxevent/linuxevent-http.pl
+          perl benchmarks/http/servers/linuxevent/server.pl probe
+          perl benchmarks/http/servers/linuxevent/server.pl version
+          printf '\n'
           perl -c benchmarks/http/servers/hyperman/hyperman-http.pl
           perl -c benchmarks/http/servers/feersum/feersum-http.pl
           perl -c benchmarks/http/servers/mojo/mojo-http.pl
