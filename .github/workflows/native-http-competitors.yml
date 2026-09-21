@@ -1,0 +1,107 @@
+name: Native HTTP competitor comparison
+
+on:
+  push:
+    branches:
+      - update/native-http-production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-http-competitors-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install benchmark targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y cpanminus build-essential git
+          sudo cpanm --notest Hyperman Feersum Mojolicious
+          python3 -m venv benchmarks/http/servers/aiohttp/.venv
+          benchmarks/http/servers/aiohttp/.venv/bin/pip install aiohttp
+          bash benchmarks/http/servers/linuxevent/install.sh
+
+      - name: Show target versions
+        shell: bash
+        working-directory: benchmarks/http
+        run: |
+          set -euo pipefail
+          for target in linuxevent hyperman feersum mojo node go aiohttp; do
+            printf '%-12s ' "$target"
+            perl "servers/$target/server.pl" version
+            printf '\n'
+          done
+          perl servers/linuxevent/server.pl settings
+          printf '\n'
+
+      - name: Smoke all targets
+        shell: bash
+        working-directory: benchmarks/http
+        run: |
+          perl run.pl \
+            --servers=linuxevent,hyperman,feersum,mojo,node,go,aiohttp \
+            --smoke \
+            --strict
+
+      - name: GET 32-byte response
+        shell: bash
+        working-directory: benchmarks/http
+        run: |
+          mkdir -p results
+          perl run.pl \
+            --servers=linuxevent,hyperman,feersum,mojo,node,go,aiohttp \
+            --strict \
+            --requests=20000 \
+            --warmup=2000 \
+            --connections=100 \
+            --pipeline=1 \
+            --response-bytes=32 \
+            --repeats=5 \
+            --json=results/native-get-32.json
+
+      - name: GET 16 KiB response
+        shell: bash
+        working-directory: benchmarks/http
+        run: |
+          perl run.pl \
+            --servers=linuxevent,hyperman,feersum,mojo,node,go,aiohttp \
+            --strict \
+            --requests=15000 \
+            --warmup=1500 \
+            --connections=100 \
+            --pipeline=1 \
+            --response-bytes=16384 \
+            --repeats=5 \
+            --json=results/native-get-16k.json
+
+      - name: POST 4 KiB request / 32-byte response
+        shell: bash
+        working-directory: benchmarks/http
+        run: |
+          perl run.pl \
+            --servers=linuxevent,hyperman,feersum,mojo,node,go,aiohttp \
+            --strict \
+            --requests=15000 \
+            --warmup=1500 \
+            --connections=100 \
+            --pipeline=1 \
+            --request-body-bytes=4096 \
+            --response-bytes=32 \
+            --repeats=5 \
+            --json=results/native-post-4k.json
+
+      - name: Upload comparison results
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-http-competitor-results
+          path: benchmarks/http/results/native-*.json
