@@ -56,19 +56,18 @@ jobs:
                   --repeats=5 \
                   --strict \
                   --json="results/${case_name}.json" | tee "results/${case_name}.txt"
-                python3 - "$case_name" "results/${case_name}.json" >> results/summary.csv <<'PY'
-                import json,sys
-                case=sys.argv[1]
-                path=sys.argv[2]
-                with open(path) as fh:
-                    report=json.load(fh)
-                cfg=report["configuration"]
-                for row in report["summary"]:
-                    print(",".join(map(str,[
-                        case,row["server"],cfg["bytes"],cfg["connections"],cfg["window"],
-                        row["transactions_per_second"]
-                    ])))
-                PY
+                perl -MJSON::PP -e '
+                  my ($case, $path) = @ARGV;
+                  open my $fh, "<", $path or die "open $path: $!";
+                  local $/;
+                  my $report = decode_json(<$fh>);
+                  my $cfg = $report->{configuration};
+                  for my $row (@{$report->{summary}}) {
+                    print join(",", $case, $row->{server}, $cfg->{bytes},
+                      $cfg->{connections}, $cfg->{window},
+                      $row->{transactions_per_second}), "\n";
+                  }
+                ' "$case_name" "results/${case_name}.json" >> results/summary.csv
               done
             done
           done
@@ -76,6 +75,7 @@ jobs:
           cat results/summary.csv
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: websocket-publishable-matrix
           path: results/
