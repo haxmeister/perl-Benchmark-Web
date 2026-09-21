@@ -180,7 +180,7 @@ sub run_case ($name) {
     my $pid = fork();
     die "fork server: $!\n" if !defined $pid;
     if ($pid == 0) {
-        exec $server{$name}{launcher}, 'run';
+        exec $^X, $server{$name}{launcher}, 'run';
         POSIX::_exit(127);
     }
 
