@@ -1,0 +1,81 @@
+name: WebSocket publishable matrix
+
+on:
+  push:
+    branches: [ bench/websocket-publishable-matrix ]
+    paths:
+      - '.github/workflows/websocket-matrix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  websocket-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install benchmark dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y cpanminus build-essential libssl-dev
+          (cd benchmarks/websocket && npm install)
+          sudo cpanm --notest Mojolicious
+          git clone --depth 1 https://github.com/haxmeister/perl-Uniform-HTTP.git /tmp/perl-Uniform-HTTP
+          sudo cpanm --notest /tmp/perl-Uniform-HTTP
+          git clone --depth 1 https://github.com/haxmeister/perl-linux-event.git /tmp/perl-linux-event
+          sudo cpanm --notest /tmp/perl-linux-event
+          git clone --depth 1 https://github.com/haxmeister/perl-Linux-Event-HTTP.git /tmp/perl-Linux-Event-HTTP
+          sudo cpanm --notest /tmp/perl-Linux-Event-HTTP
+          git clone --depth 1 https://github.com/haxmeister/perl-Linux-Event-WebSocket.git /tmp/perl-Linux-Event-WebSocket
+          (cd /tmp/perl-Linux-Event-WebSocket && perl Makefile.PL && make)
+          printf '%s\n' /tmp/perl-Linux-Event-WebSocket > benchmarks/websocket/servers/linuxevent/source-root
+
+      - name: Run full WebSocket matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p results
+          echo 'case,server,bytes,connections,window,txn_per_sec' > results/summary.csv
+          for bytes in 64 256; do
+            for connections in 100 1000; do
+              for window in 1 4 16; do
+                case_name="b${bytes}_c${connections}_w${window}"
+                echo "===== CASE ${case_name} ====="
+                perl benchmarks/websocket/run.pl \
+                  --servers=linuxevent,mojo,nodews,gorilla \
+                  --bytes="$bytes" \
+                  --connections="$connections" \
+                  --window="$window" \
+                  --warmup=0.75 \
+                  --seconds=3 \
+                  --repeats=5 \
+                  --strict \
+                  --json="results/${case_name}.json" | tee "results/${case_name}.txt"
+                python3 - "$case_name" "results/${case_name}.json" >> results/summary.csv <<'PY'
+import json,sys
+case=sys.argv[1]
+path=sys.argv[2]
+with open(path) as fh:
+    report=json.load(fh)
+cfg=report["configuration"]
+for row in report["summary"]:
+    print(",".join(map(str,[
+        case,row["server"],cfg["bytes"],cfg["connections"],cfg["window"],
+        row["transactions_per_second"]
+    ])))
+PY
+              done
+            done
+          done
+          echo "===== CONSOLIDATED MATRIX ====="
+          cat results/summary.csv
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: websocket-publishable-matrix
+          path: results/
