@@ -41,28 +41,9 @@ my $payload = 'x' x $response_bytes;
     }
 }
 
-{
-    package Benchmark::Web::HTTP::LinuxEvent::RawNative;
-    use parent -norequire, 'Benchmark::Web::HTTP::LinuxEvent::Natural';
-    use Linux::Event::Framer ();
-    use Linux::Event::HTTP::_HTTP1 ();
-
-    Linux::Event::Framer->declare_native_consumer(
-        __PACKAGE__,
-        Linux::Event::HTTP::_HTTP1->_raw_consumer_definition,
-    );
-
-    sub can ($class, $name) {
-        return undef if $name eq 'on_data';
-        return $class->SUPER::can($name);
-    }
-}
-
 my $connection_class = $mode eq 'natural'
     ? 'Benchmark::Web::HTTP::LinuxEvent::Natural'
-    : $mode eq 'raw-native'
-        ? 'Benchmark::Web::HTTP::LinuxEvent::RawNative'
-        : die "unknown BENCH_LINUXEVENT_MODE: $mode\n";
+    : die "unknown BENCH_LINUXEVENT_MODE: $mode\n";
 
 my $loop = Linux::Event::Loop->new;
 my $server = Linux::Event::HTTP::Server->new(
