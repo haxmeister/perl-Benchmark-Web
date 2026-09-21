@@ -28,4 +28,7 @@ my $app = sub {
     ];
 };
 
-$app;
+{
+    no warnings 'void';
+    $app;
+}
