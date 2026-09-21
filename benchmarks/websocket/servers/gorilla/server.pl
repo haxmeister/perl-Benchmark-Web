@@ -1,4 +1,5 @@
-use Cwd ();\n#!/usr/bin/env perl
+#!/usr/bin/env perl
+use Cwd ();
 use v5.36;
 use strict;
 use warnings;
