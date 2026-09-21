@@ -84,6 +84,15 @@ for my $name (@servers) {
         $skip_reason{$name} = 'unsupported workload: ' . $server{$name}{workload_unsupported_reason};
         next;
     }
+    if (defined($server{$name}{max_persistent_connections})
+        && $connections > $server{$name}{max_persistent_connections}) {
+        my $limit = $server{$name}{max_persistent_connections};
+        push @skipped, $name;
+        $skip_reason{$name}
+            = "workload requests $connections persistent connections; "
+            . "target benchmark configuration supports at most $limit";
+        next;
+    }
     if (!launcher_ok($name, 'probe')) {
         push @skipped, $name;
         $skip_reason{$name} = 'probe failed';
@@ -297,6 +306,14 @@ sub discover_servers () {
             $workload_unsupported_reason = "$info->{workload_unsupported_reason}";
         }
 
+        my $max_persistent_connections;
+        if (exists $info->{max_persistent_connections}) {
+            my $value = $info->{max_persistent_connections};
+            die "benchmark server $key: info.max_persistent_connections must be a positive integer\n"
+                if ref($value) || "$value" !~ /\A[1-9][0-9]*\z/;
+            $max_persistent_connections = 0 + $value;
+        }
+
         my $order = defined($info->{order}) ? 0 + $info->{order} : 1000;
         $found{$key} = {
             label => "$info->{label}",
@@ -304,6 +321,7 @@ sub discover_servers () {
             order => $order,
             workload_supported => $workload_supported,
             workload_unsupported_reason => $workload_unsupported_reason,
+            max_persistent_connections => $max_persistent_connections,
             launcher => $launcher,
         };
     }
