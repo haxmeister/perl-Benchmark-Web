@@ -180,6 +180,7 @@ sub run_case ($name) {
         POSIX::_exit(127);
     }
 
+    my ($row, $error);
     eval {
         wait_for_port($pid, $port);
         my @command = (
@@ -198,7 +199,7 @@ sub run_case ($name) {
             = split /,/, $line;
         die "malformed client result for $name: $line\n"
             if !defined($rate) || $label ne $name;
-        return {
+        $row = {
             server => $name,
             bytes => 0 + $got_bytes,
             connections => 0 + $got_connections,
@@ -207,12 +208,13 @@ sub run_case ($name) {
             seconds => 0 + $elapsed,
             transactions_per_second => 0 + $rate,
         };
-    };
-    my $error = $@;
+        1;
+    } or $error = $@ || "benchmark case failed\n";
+
     kill 'TERM', $pid;
     waitpid($pid, 0);
-    die $error if $error;
-    die "internal benchmark runner error\n";
+    die $error if defined $error;
+    return $row;
 }
 
 sub wait_for_port ($pid, $port) {
