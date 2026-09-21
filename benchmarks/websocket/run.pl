@@ -12,9 +12,6 @@ use JSON::PP ();
 use POSIX qw(WNOHANG strftime uname);
 use Time::HiRes qw(sleep time);
 
-die "shared WebSocket client dependency is unavailable; run 'npm install' in benchmarks/websocket\n"
-    if system('node', "$Bin/probe-client.mjs") != 0;
-
 my %server = discover_servers();
 my @prepared;
 END {
@@ -71,6 +68,9 @@ die "repeats must be > 0\n" if $repeats <= 0;
 die "timeout must be > 0\n" if $timeout <= 0;
 die "at least one server is required\n" if !@servers;
 die "unknown server: $_\n" for grep { !exists $server{$_} } @servers;
+
+die "shared WebSocket client dependency is unavailable; run 'npm install' in benchmarks/websocket\n"
+    if system('node', "$Bin/probe-client.mjs") != 0;
 
 my (@available, @skipped);
 my %skip_reason;
