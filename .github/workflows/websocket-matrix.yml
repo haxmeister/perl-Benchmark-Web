@@ -57,18 +57,18 @@ jobs:
                   --strict \
                   --json="results/${case_name}.json" | tee "results/${case_name}.txt"
                 python3 - "$case_name" "results/${case_name}.json" >> results/summary.csv <<'PY'
-import json,sys
-case=sys.argv[1]
-path=sys.argv[2]
-with open(path) as fh:
-    report=json.load(fh)
-cfg=report["configuration"]
-for row in report["summary"]:
-    print(",".join(map(str,[
-        case,row["server"],cfg["bytes"],cfg["connections"],cfg["window"],
-        row["transactions_per_second"]
-    ])))
-PY
+                import json,sys
+                case=sys.argv[1]
+                path=sys.argv[2]
+                with open(path) as fh:
+                    report=json.load(fh)
+                cfg=report["configuration"]
+                for row in report["summary"]:
+                    print(",".join(map(str,[
+                        case,row["server"],cfg["bytes"],cfg["connections"],cfg["window"],
+                        row["transactions_per_second"]
+                    ])))
+                PY
               done
             done
           done
