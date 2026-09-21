@@ -24,6 +24,19 @@ Mojolicious, Node.js, Go, aiohttp, and optional reference servers.
 **Linux::Event is not required. Hyperman is not required. No benchmarked server
 is a project dependency.**
 
+### WebSocket application comparison
+
+[`benchmarks/websocket/`](benchmarks/websocket/)
+
+Cross-server WebSocket application throughput using one shared client and one
+documented request/acknowledgement workload. The initial adapters cover
+Linux::Event::WebSocket, Mojolicious, Node.js `ws`, and Go
+`gorilla/websocket`.
+
+The workload exposes connection count and outstanding-message window separately
+so one-request-at-a-time turnaround and sustained windowed throughput are not
+collapsed into one score.
+
 ### Async and event-loop comparisons
 
 [`benchmarks/async/`](benchmarks/async/)
@@ -43,13 +56,17 @@ benchmarks/
         README.md
         run.pl
         servers/
+    websocket/
+        README.md
+        run.pl
+        servers/
     async/
         README.md
 ```
 
 Additional benchmark families can be added when they have a distinct workload
-contract. Examples might include streams, WebSocket, timers, scheduling, or
-socket lifecycle benchmarks.
+contract. Examples might include streams, timers, scheduling, or socket
+lifecycle benchmarks.
 
 ## Principles
 

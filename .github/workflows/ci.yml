@@ -169,4 +169,79 @@ jobs:
             --servers=linuxevent,hyperman,feersum,mojo,node,go,aiohttp \
             --smoke \
             --strict \
-            --request-body-bytes=4096
+            --request-body-bytes=4096\n
+  baseline-websocket-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shared WebSocket client
+        working-directory: benchmarks/websocket
+        run: npm install
+
+      - name: Check WebSocket runner and launcher contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          perl -c benchmarks/websocket/run.pl
+          for launcher in benchmarks/websocket/servers/*/server.pl; do
+            perl -c "$launcher"
+            perl "$launcher" info | python3 -c 'import json,sys; x=json.load(sys.stdin); assert isinstance(x.get("label"), str) and x["label"]'
+          done
+          node --check benchmarks/websocket/load.mjs
+          node --check benchmarks/websocket/servers/nodews/node-ws.mjs
+          perl benchmarks/websocket/run.pl --help | grep -F 'discovered server keys'
+
+      - name: Smoke comparison without Linux::Event
+        shell: bash
+        run: |
+          perl benchmarks/websocket/run.pl \
+            --servers=nodews,gorilla \
+            --smoke \
+            --strict \
+            --json=/tmp/websocket-smoke.json | tee /tmp/websocket-smoke.out
+          test -s /tmp/websocket-smoke.json
+          grep -F 'Benchmark::Web WebSocket application comparison' /tmp/websocket-smoke.out
+          grep -F 'Median summary' /tmp/websocket-smoke.out
+          python3 - <<'PY'
+          import json
+          with open('/tmp/websocket-smoke.json') as fh:
+              report = json.load(fh)
+          assert report['benchmark'] == 'benchmark-web-websocket-application'
+          assert report['configuration']['window'] == 1
+          assert 'nodews' in report['environment']['servers']
+          assert 'gorilla' in report['environment']['servers']
+          PY
+
+  optional-websocket-adapters:
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install WebSocket benchmark dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cpanminus build-essential libssl-dev
+          (cd benchmarks/websocket && npm install)
+          sudo cpanm --notest Mojolicious
+          git clone --depth 1 https://github.com/haxmeister/perl-Uniform-HTTP.git /tmp/perl-Uniform-HTTP
+          sudo cpanm --notest /tmp/perl-Uniform-HTTP
+          git clone --depth 1 https://github.com/haxmeister/perl-linux-event.git /tmp/perl-linux-event
+          sudo cpanm --notest /tmp/perl-linux-event
+          git clone --depth 1 https://github.com/haxmeister/perl-Linux-Event-HTTP.git /tmp/perl-Linux-Event-HTTP
+          sudo cpanm --notest /tmp/perl-Linux-Event-HTTP
+          git clone --depth 1 https://github.com/haxmeister/perl-Linux-Event-WebSocket.git /tmp/perl-Linux-Event-WebSocket
+          (cd /tmp/perl-Linux-Event-WebSocket && perl Makefile.PL && make)
+          printf '%s\n' /tmp/perl-Linux-Event-WebSocket > benchmarks/websocket/servers/linuxevent/source-root
+
+      - name: Smoke all initial WebSocket adapters
+        shell: bash
+        run: |
+          perl benchmarks/websocket/run.pl \
+            --servers=linuxevent,mojo,nodews,gorilla \
+            --smoke \
+            --strict

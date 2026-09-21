@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "Shared Benchmark::Web WebSocket load-generator dependency",
+  "dependencies": {
+    "ws": "8.18.3"
+  }
+}
