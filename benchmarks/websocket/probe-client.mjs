@@ -1,1 +1,1 @@
-import 'ws';\n
+import 'ws';
