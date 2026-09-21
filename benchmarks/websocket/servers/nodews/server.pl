@@ -20,10 +20,8 @@ if ($action eq 'probe') {
 }
 if ($action eq 'prepare' || $action eq 'cleanup') { exit 0 }
 if ($action eq 'version') {
-    my $node = capture('node', '--version') // 'node unknown';
-    my $ws = capture('node', '-e', q{console.log(require('ws/package.json').version)}) // 'ws unknown';
-    print "$node, ws $ws";
-    exit 0;
+    exec 'node', "$Bin/version.mjs";
+    exit 127;
 }
 if ($action eq 'settings') {
     print 'runtime=node, library=ws, process=1, permessage-deflate=off';
