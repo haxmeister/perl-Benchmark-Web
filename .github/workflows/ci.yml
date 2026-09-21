@@ -61,18 +61,20 @@ jobs:
         run: |
           set -euo pipefail
           perl benchmarks/http/run.pl \
-            --servers=node,twiggy \
+            --servers=node,twiggy,gazelle \
             --smoke \
             --json=/tmp/http-unsupported.json \
             | tee /tmp/http-unsupported.out
           grep -F 'Twiggy/AnyEvent [unsupported workload:' /tmp/http-unsupported.out
+          grep -F 'Gazelle [unsupported workload:' /tmp/http-unsupported.out
           ! grep -F 'server closed connection before benchmark phase completed' /tmp/http-unsupported.out
           python3 - <<'PY'
           import json
           with open('/tmp/http-unsupported.json') as fh:
               report = json.load(fh)
-          assert report['configuration']['skipped'] == ['twiggy']
+          assert set(report['configuration']['skipped']) == {'twiggy', 'gazelle'}
           assert 'persistent HTTP/1.1' in report['configuration']['skipped_reasons']['twiggy']
+          assert 'keep-alive' in report['configuration']['skipped_reasons']['gazelle']
           PY
 
           set +e
@@ -89,6 +91,24 @@ jobs:
           grep -F 'unsupported workload:' /tmp/http-unsupported-strict.out
           ! grep -F 'server closed connection before benchmark phase completed' /tmp/http-unsupported-only.out
           ! grep -F 'server closed connection before benchmark phase completed' /tmp/http-unsupported-strict.out
+
+      - name: Honor target persistent-connection limits
+        shell: bash
+        run: |
+          set -euo pipefail
+          perl benchmarks/http/run.pl \
+            --servers=node,starman \
+            --smoke \
+            --json=/tmp/http-connection-limit.json \
+            | tee /tmp/http-connection-limit.out
+          grep -F 'Starman [workload requests 4 persistent connections; target benchmark configuration supports at most 1]' /tmp/http-connection-limit.out
+          python3 - <<'PY'
+          import json
+          with open('/tmp/http-connection-limit.json') as fh:
+              report = json.load(fh)
+          assert report['configuration']['skipped'] == ['starman']
+          assert 'supports at most 1' in report['configuration']['skipped_reasons']['starman']
+          PY
 
       - name: Smoke comparison without Linux::Event
         shell: bash
@@ -139,7 +159,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y cpanminus build-essential
-          sudo cpanm --notest Hyperman Feersum Mojolicious
+          sudo cpanm --notest Hyperman Feersum Mojolicious Starman
           bash benchmarks/http/servers/linuxevent/install.sh
           python3 -m venv benchmarks/http/servers/aiohttp/.venv
           benchmarks/http/servers/aiohttp/.venv/bin/pip install aiohttp
@@ -153,6 +173,7 @@ jobs:
           perl -c benchmarks/http/servers/hyperman/hyperman-http.pl
           perl -c benchmarks/http/servers/feersum/feersum-http.pl
           perl -c benchmarks/http/servers/mojo/mojo-http.pl
+          perl -c benchmarks/http/servers/starman/starman-http.psgi
 
       - name: Smoke selected public comparison
         shell: bash
@@ -160,6 +181,18 @@ jobs:
           perl benchmarks/http/run.pl \
             --servers=linuxevent,hyperman,feersum,mojo,node,go,aiohttp \
             --smoke \
+            --strict
+
+      - name: Smoke Starman single-slot profile
+        shell: bash
+        run: |
+          perl benchmarks/http/run.pl \
+            --servers=starman \
+            --requests=500 \
+            --warmup=100 \
+            --connections=1 \
+            --repeats=1 \
+            --timeout=20 \
             --strict
 
       - name: Exercise selected request-body contract
