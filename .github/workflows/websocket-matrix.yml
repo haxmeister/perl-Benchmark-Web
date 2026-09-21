@@ -11,9 +11,16 @@ permissions:
   contents: read
 
 jobs:
-  websocket-matrix:
+  websocket-case:
+    strategy:
+      fail-fast: false
+      matrix:
+        bytes: [64, 256]
+        connections: [100, 1000]
+        window: [1, 4, 16]
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
+    name: b${{ matrix.bytes }} c${{ matrix.connections }} w${{ matrix.window }}
     steps:
       - uses: actions/checkout@v4
 
@@ -25,61 +32,43 @@ jobs:
           sudo apt-get install -y cpanminus build-essential libssl-dev
           (cd benchmarks/websocket && npm install)
           sudo cpanm --notest Mojolicious
+
           git clone https://github.com/haxmeister/perl-Uniform-HTTP.git /tmp/perl-Uniform-HTTP
           git -C /tmp/perl-Uniform-HTTP checkout b2b243957a8f82dfef6081431d7e5e6f84dc1b08
           sudo cpanm --notest /tmp/perl-Uniform-HTTP
+
           git clone https://github.com/haxmeister/perl-linux-event.git /tmp/perl-linux-event
           git -C /tmp/perl-linux-event checkout 007db40e22374c6d7bf8e056b2d354681d20c852
           sudo cpanm --notest /tmp/perl-linux-event
+
           git clone https://github.com/haxmeister/perl-Linux-Event-HTTP.git /tmp/perl-Linux-Event-HTTP
           git -C /tmp/perl-Linux-Event-HTTP checkout c4f051bf0de69cf5216cf3e4264f398e1a39f121
           sudo cpanm --notest /tmp/perl-Linux-Event-HTTP
+
           git clone https://github.com/haxmeister/perl-Linux-Event-WebSocket.git /tmp/perl-Linux-Event-WebSocket
           git -C /tmp/perl-Linux-Event-WebSocket checkout b15fd32eab5346a166e0333399836c8402ff48d9
           (cd /tmp/perl-Linux-Event-WebSocket && perl Makefile.PL && make)
           printf '%s\n' /tmp/perl-Linux-Event-WebSocket > benchmarks/websocket/servers/linuxevent/source-root
 
-      - name: Run full WebSocket matrix
+      - name: Run case
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p results
-          echo 'case,server,bytes,connections,window,txn_per_sec' > results/summary.csv
-          for bytes in 64 256; do
-            for connections in 100 1000; do
-              for window in 1 4 16; do
-                case_name="b${bytes}_c${connections}_w${window}"
-                echo "===== CASE ${case_name} ====="
-                perl benchmarks/websocket/run.pl \
-                  --servers=linuxevent,mojo,nodews,gorilla \
-                  --bytes="$bytes" \
-                  --connections="$connections" \
-                  --window="$window" \
-                  --warmup=0.75 \
-                  --seconds=3 \
-                  --repeats=5 \
-                  --strict \
-                  --json="results/${case_name}.json" | tee "results/${case_name}.txt"
-                perl -MJSON::PP -e '
-                  my ($case, $path) = @ARGV;
-                  open my $fh, "<", $path or die "open $path: $!";
-                  local $/;
-                  my $report = decode_json(<$fh>);
-                  my $cfg = $report->{configuration};
-                  for my $row (@{$report->{summary}}) {
-                    print join(",", $case, $row->{server}, $cfg->{bytes},
-                      $cfg->{connections}, $cfg->{window},
-                      $row->{transactions_per_second}), "\n";
-                  }
-                ' "$case_name" "results/${case_name}.json" >> results/summary.csv
-              done
-            done
-          done
-          echo "===== CONSOLIDATED MATRIX ====="
-          cat results/summary.csv
+          case_name="b${{ matrix.bytes }}_c${{ matrix.connections }}_w${{ matrix.window }}"
+          perl benchmarks/websocket/run.pl \
+            --servers=linuxevent,mojo,nodews,gorilla \
+            --bytes="${{ matrix.bytes }}" \
+            --connections="${{ matrix.connections }}" \
+            --window="${{ matrix.window }}" \
+            --warmup=0.75 \
+            --seconds=3 \
+            --repeats=5 \
+            --strict \
+            --json="results/${case_name}.json" | tee "results/${case_name}.txt"
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: websocket-publishable-matrix
+          name: websocket-b${{ matrix.bytes }}-c${{ matrix.connections }}-w${{ matrix.window }}
           path: results/
