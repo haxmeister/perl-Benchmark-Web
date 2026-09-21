@@ -24,8 +24,12 @@ if ($action eq 'probe') {
 if ($action eq 'prepare') {
     my $old = Cwd::getcwd();
     chdir $Bin or die "chdir $Bin: $!\n";
-    system 'go', 'build', '-o', $binary, '.';
+    system 'go', 'mod', 'download';
     my $status = $?;
+    if ($status == 0) {
+        system 'go', 'build', '-o', $binary, '.';
+        $status = $?;
+    }
     chdir $old or die "chdir $old: $!\n";
     exit($status == 0 ? 0 : 1);
 }
