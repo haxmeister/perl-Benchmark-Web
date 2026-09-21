@@ -98,37 +98,28 @@ printf '%s\n' /path/to/perl-Linux-Event-HTTP \
   > servers/linuxevent/source-root
 ```
 
-## Adapter modes
+## Adapter mode
 
 The public comparison target uses `natural` mode and
 `read_budget_bytes=0`. It exercises the normal public
 `Linux::Event::HTTP::Server` /
 `Linux::Event::HTTP::Server::Connection` API.
 
+Current Linux::Event::HTTP production `Server::Connection` consumes HTTP/1
+input through its native ordered-byte consumer. Benchmark::Web does not declare
+or enable a benchmark-only raw-input subclass.
+
 For requests without bodies, `natural` replies from `on_request`. For
 request-body workloads, it waits for `on_request_end` so the complete request
 body is consumed before responding, matching Benchmark::Web's cross-server
 workload contract.
 
-The response uses `Content-Type: application/octet-stream` and a complete scalar
-`Response->body`.
-
-For development-only measurements, `BENCH_LINUXEVENT_MODE=raw-native` selects
-the distribution's currently internal raw native HTTP/1 consumer path:
-
-```sh
-BENCH_LINUXEVENT_MODE=raw-native \
-  perl run.pl --servers=linuxevent --requests=50000 --repeats=5
-```
-
-That mode is deliberately not the default Benchmark::Web result while raw native
-input remains an internal/opt-in Linux::Event::HTTP capability.
+The response uses `Content-Type: application/octet-stream` and a complete
+scalar `Response->body`.
 
 `BENCH_READ_BUDGET_BYTES` overrides the connection class
 `read_budget_bytes` stream tuning value. The launcher reports the selected
 source, mode, and read budget through its `settings` action.
-
-Do not mix Linux::Event modes in one published result without labeling them.
 
 ## Launcher interface
 
