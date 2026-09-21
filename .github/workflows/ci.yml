@@ -202,7 +202,7 @@ jobs:
             --servers=linuxevent,hyperman,feersum,mojo,node,go,aiohttp \
             --smoke \
             --strict \
-            --request-body-bytes=4096\n
+            --request-body-bytes=4096
   baseline-websocket-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 10
