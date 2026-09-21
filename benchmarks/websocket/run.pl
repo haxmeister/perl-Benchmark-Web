@@ -7,10 +7,13 @@ use File::Basename qw(dirname);
 use File::Path qw(make_path);
 use FindBin qw($Bin);
 use Getopt::Long qw(GetOptions);
-use IO::Socket::INET;
+use IO::Select;\nuse IO::Socket::INET;
 use JSON::PP ();
 use POSIX qw(WNOHANG strftime uname);
 use Time::HiRes qw(sleep time);
+
+die "shared WebSocket client dependency is unavailable; run 'npm install' in benchmarks/websocket\n"
+    if system('node', "$Bin/probe-client.mjs") != 0;
 
 my %server = discover_servers();
 my @prepared;
@@ -290,21 +293,42 @@ sub capture_timeout ($limit, @command) {
         POSIX::_exit(127);
     }
     close $write;
+
+    my $select = IO::Select->new($read);
     my $deadline = time + $limit;
     my $text = '';
+    my $exited = 0;
+
     while (time < $deadline) {
+        if ($select->can_read(0.05)) {
+            my $chunk = '';
+            my $n = sysread($read, $chunk, 65536);
+            if (defined($n) && $n > 0) {
+                $text .= $chunk;
+            } elsif (defined($n) && $n == 0) {
+                $select->remove($read);
+            }
+        }
+
         my $done = waitpid($pid, WNOHANG);
-        my $chunk = '';
-        my $n = sysread($read, $chunk, 65536);
-        $text .= $chunk if defined($n) && $n > 0;
-        last if $done == $pid;
-        sleep 0.02;
+        if ($done == $pid) {
+            $exited = 1;
+            last;
+        }
     }
-    if (waitpid($pid, WNOHANG) == 0) {
+
+    if (!$exited) {
         kill 'TERM', $pid;
         waitpid($pid, 0);
         close $read;
         return undef;
+    }
+
+    while ($select->count && $select->can_read(0)) {
+        my $chunk = '';
+        my $n = sysread($read, $chunk, 65536);
+        last if !defined($n) || $n == 0;
+        $text .= $chunk;
     }
     close $read;
     return undef if $? != 0;
