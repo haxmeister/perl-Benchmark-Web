@@ -37,6 +37,7 @@ let measuring = false;
 let stopped = false;
 let finished = false;
 let startNs = 0n;
+let setupTimer;
 
 function fail(message) {
   if (finished) return;
@@ -85,7 +86,10 @@ for (let i = 0; i < clients; ++i) {
   sockets.push(ws);
 
   ws.on('open', () => {
-    if (++opened === clients) begin();
+    if (++opened === clients) {
+      clearTimeout(setupTimer);
+      begin();
+    }
   });
 
   ws.on('message', (data, isBinary) => {
@@ -104,6 +108,6 @@ for (let i = 0; i < clients; ++i) {
   });
 }
 
-setTimeout(() => {
+setupTimer = setTimeout(() => {
   if (!finished && opened !== clients) fail(`connection setup timed out: opened ${opened}/${clients}`);
 }, 15_000);
