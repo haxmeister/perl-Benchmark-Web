@@ -52,7 +52,9 @@ Each target lives in its own directory. Its README owns installation instruction
 | `node` | Node.js built-in `http` | default | [servers/node/README.md](servers/node/README.md) |
 | `go` | Go `net/http` | default | [servers/go/README.md](servers/go/README.md) |
 | `aiohttp` | Python aiohttp | default | [servers/aiohttp/README.md](servers/aiohttp/README.md) |
-| `twiggy` | Twiggy/AnyEvent | explicit-only | [servers/twiggy/README.md](servers/twiggy/README.md) |
+| `starman` | Starman | explicit-only; max 1 persistent connection | [servers/starman/README.md](servers/starman/README.md) |
+| `twiggy` | Twiggy/AnyEvent | explicit-only; unsupported workload | [servers/twiggy/README.md](servers/twiggy/README.md) |
+| `gazelle` | Gazelle | explicit-only; unsupported workload | [servers/gazelle/README.md](servers/gazelle/README.md) |
 | `h2o` | libh2o evloop | explicit-only | [servers/h2o/README.md](servers/h2o/README.md) |
 
 Default target set:
@@ -63,7 +65,9 @@ linuxevent,hyperman,feersum,mojo,node,go,aiohttp
 
 The default set comes from metadata returned by each target's `server.pl info` action; it is not hard-coded in `run.pl`.
 
-Twiggy is explicit-only and declares this workload unsupported because stock Twiggy closes the connection after each response, while this benchmark requires persistent HTTP/1.1 connections. libh2o is explicit-only because it is a lower-level protocol/server reference rather than a peer application API.
+Starman is explicit-only. Its normal prefork model is blocking per worker, so the benchmark fixes it at one worker to preserve one application execution slot and declares a maximum of one persistent connection. Runs requesting more connections skip or reject Starman before startup.
+
+Twiggy and Gazelle are explicit-only and declare this workload unsupported. Stock Twiggy closes the connection after each response, and Gazelle 0.50 explicitly does not support keep-alive, while this benchmark requires persistent HTTP/1.1 connections. libh2o is explicit-only because it is a lower-level protocol/server reference rather than a peer application API.
 
 ## Workload contract
 
@@ -294,10 +298,18 @@ servers/
         README.md
         server.pl
         node-http.js
+    starman/
+        README.md
+        server.pl
+        starman-http.psgi
     twiggy/
         README.md
         server.pl
         twiggy-http.pl
+    gazelle/
+        README.md
+        server.pl
+        gazelle-http.psgi
 ```
 
 Each server directory owns its adapter source, setup documentation, dependency detection, build preparation, runtime configuration, and cleanup.
@@ -349,7 +361,7 @@ server.pl cleanup
 
 The actions mean:
 
-- `info` prints one JSON object with at least `label`; `default` selects whether the target joins the default matrix, and `order` controls stable display order. A target that cannot satisfy this benchmark family's workload contract can set `workload_supported` to false and provide `workload_unsupported_reason`; the runner then skips or rejects it before `probe`, `prepare`, or `run`.
+- `info` prints one JSON object with at least `label`; `default` selects whether the target joins the default matrix, and `order` controls stable display order. A target that cannot satisfy this benchmark family's workload contract can set `workload_supported` to false and provide `workload_unsupported_reason`; the runner then skips or rejects it before `probe`, `prepare`, or `run`. A target whose fixed benchmark configuration can support only a bounded number of simultaneous persistent connections can set `max_persistent_connections` to a positive integer; higher-concurrency runs are skipped or rejected before startup.
 - `probe` exits zero when the target can be used on this machine and nonzero otherwise.
 - `prepare` performs target-specific setup such as compiling a temporary helper binary. It exits zero on success.
 - `version` prints the target/runtime version used for the JSON report.
